@@ -1,9 +1,11 @@
 import time
 import footsiesgym
+import sys
+PLATFORM = "mac" if sys.platform == "darwin" else "linux"
 
 env = footsiesgym.make(
     config={"headless": False, "port": 50051},
-    platform="mac", # IMPORTANT: "mac" or "linux" depending on your platform
+    platform=PLATFORM, # IMPORTANT: "mac" or "linux" depending on your platform
     launch_binaries=False,
 )
 obs, infos = env.reset()

@@ -1,6 +1,8 @@
 import footsiesgym
 
-env = footsiesgym.make(platform="mac") # IMPORTANT: "mac" or "linux" depending on your platform
+import sys
+PLATFORM = "mac" if sys.platform == "darwin" else "linux"
+env = footsiesgym.make(platform=PLATFORM)
 obs, infos = env.reset() 
 
 for _ in range(1000):
