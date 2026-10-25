@@ -55,15 +55,20 @@ class ConstantActionOpponent:
 
 OPPONENTS: dict[str, Callable[..., Opponent]] = {
     "random": RandomOpponent,
-    # Extra kwargs (num_actions, seed) are accepted and ignored.
-    "noop": lambda **_: ConstantActionOpponent(EnvActions.NONE),
-    "back": lambda **_: ConstantActionOpponent(EnvActions.BACK),
+    # num_actions and seed are accepted by name and ignored.
+    "noop": lambda num_actions, seed: ConstantActionOpponent(EnvActions.NONE),
+    "back": lambda num_actions, seed: ConstantActionOpponent(EnvActions.BACK),
 }
 
 
-def make_opponent(name: str, **kwargs) -> Opponent:
-    """Build the opponent registered under name, passing kwargs to it."""
+def make_opponent(name: str, *, num_actions: int = 6,
+                  seed: int | None = None) -> Opponent:
+    """Build the opponent registered under name.
+
+    Parameters are explicit so that a misspelled keyword raises a
+    TypeError instead of silently falling back to a default seed.
+    """
     if name not in OPPONENTS:
         raise ValueError(
             f"Unknown opponent {name!r}; available: {sorted(OPPONENTS)}")
-    return OPPONENTS[name](**kwargs)
+    return OPPONENTS[name](num_actions=num_actions, seed=seed)
