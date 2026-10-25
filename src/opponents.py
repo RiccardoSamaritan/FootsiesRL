@@ -6,6 +6,7 @@ through make_opponent(), so evaluation can sweep the difficulty scale.
 from typing import Callable, Protocol
 
 import numpy as np
+from footsiesgym.footsies.game.constants import EnvActions
 
 
 class Opponent(Protocol):
@@ -38,8 +39,25 @@ class RandomOpponent:
         return int(self.rng.integers(self.num_actions))
 
 
+class ConstantActionOpponent:
+    """Always plays the same action, ignoring obs and info.
+    """
+
+    def __init__(self, action: int):
+        self.action = action
+
+    def reset(self, env_id: str = "default") -> None:
+        pass
+
+    def act(self, agent_id: str, obs, info: dict) -> int:
+        return self.action
+
+
 OPPONENTS: dict[str, Callable[..., Opponent]] = {
     "random": RandomOpponent,
+    # Extra kwargs (num_actions, seed) are accepted and ignored.
+    "noop": lambda **_: ConstantActionOpponent(EnvActions.NONE),
+    "back": lambda **_: ConstantActionOpponent(EnvActions.BACK),
 }
 
 
