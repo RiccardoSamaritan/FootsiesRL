@@ -16,7 +16,7 @@ uv sync
 
 # Run any script inside the environment, without activating it
 uv run python test.py
-uv run python src/train_ppo.py
+uv run python src/train.py
 ```
 
 > **Note**: the project now uses uv only; `requirements.txt` and pip are gone. After pulling, install uv (see above) and run `uv sync` to recreate `.venv` (delete your old `.venv` first if it was created with `python3 -m venv`).
