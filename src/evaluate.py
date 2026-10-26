@@ -7,15 +7,19 @@ sign of the agent's final reward gives the outcome.
 
 Examples:
     uv run python src/evaluate.py --agent random --games 1000
+    uv run python src/evaluate.py --agent runs/smoke/final.pt --games 200
     uv run python src/evaluate.py --agent footsies_bot --opponents noop back
 """
 import argparse
 import math
+import os
 import sys
 
 import footsiesgym
+import torch
 
 from opponents import OPPONENTS, Opponent, make_opponent
+from policy import load_policy_opponent
 
 PLATFORM = "mac" if sys.platform == "darwin" else "linux"
 
@@ -33,6 +37,18 @@ def normal_interval(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
     p = k / n
     half = z * math.sqrt(p * (1 - p) / n)
     return max(0.0, p - half), min(1.0, p + half)
+
+
+def make_player(spec: str, *, seed: int, frame_skip: int,
+                device: str = "cpu") -> Opponent:
+    """Build a player from a fixed-opponent name or from a checkpoint path."""
+    if spec in OPPONENTS:
+        return make_opponent(spec, seed=seed, frame_skip=frame_skip)
+    if not os.path.isfile(spec):
+        raise ValueError(
+            f"{spec!r} is neither a fixed opponent ({sorted(OPPONENTS)}) "
+            "nor the path of a checkpoint file")
+    return load_policy_opponent(spec, device=device)
 
 
 def play_game(env, agent: Opponent, opponent: Opponent, agent_side: str) -> int:
@@ -85,19 +101,22 @@ def print_table(rows: list[dict]) -> None:
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--agent", default="random", choices=sorted(OPPONENTS),
-                   help="policy to evaluate")
+    p.add_argument("--agent", default="random",
+                   help="fixed opponent name or path to a .pt checkpoint")
     p.add_argument("--opponents", nargs="+", default=list(OPPONENTS),
                    choices=sorted(OPPONENTS))
     p.add_argument("--games", type=int, default=1000,
                    help="games per opponent, sides alternate P1/P2")
     p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--device", default="cpu")
     args = p.parse_args()
 
     # Agent and opponents get different seeds so that random vs random
     # does not play mirrored actions.
-    agent = make_opponent(args.agent, seed=args.seed + 1,
-                          frame_skip=ENV_CONFIG["frame_skip"])
+    torch.manual_seed(args.seed + 1)  # sampling of a PolicyOpponent
+    agent = make_player(args.agent, seed=args.seed + 1,
+                        frame_skip=ENV_CONFIG["frame_skip"],
+                        device=args.device)
     print_table(evaluate(agent, args.opponents, args.games, args.seed))
 
 

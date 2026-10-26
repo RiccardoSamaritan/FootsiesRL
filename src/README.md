@@ -23,6 +23,11 @@ Run everything from the repository root with `uv run python ...`.
   `runs/<run-name>/log.csv` and checkpoints (`ckpt_<steps>.pt`, `final.pt`).
 - `opponents.py`: fixed opponents (random, no-op, back, rule-based
   FootsiesBot) for evaluation.
+- `evaluate.py`: plays N games against each fixed opponent, sides alternating,
+  win/draw/loss with a 95% confidence interval. The agent can be a fixed
+  opponent or a trained checkpoint.
+- `policy.py`: wraps a trained checkpoint as an Opponent, sampling actions
+  (never argmax).
 
 ## Usage
 
@@ -45,5 +50,5 @@ Useful options: `--gae-lambda`, `--gamma`, `--lr`, `--ent-coef`, `--ent-decay`,
   the reset observation, so the final observation of a game is lost. For
   timeouts (`max_t`) `compute_gae` approximates the bootstrap value with the
   value of the previous observation.
-- Training reward is the terminal win/loss reward (+-10). Evaluation scripts
-  are not written yet.
+- Training reward is the terminal win/loss reward (+-10). Evaluation is done
+  with `evaluate.py`; see the file list above.
