@@ -65,7 +65,7 @@ class FootsiesVecEnv:
         self.reward_fn = reward_fn
         self.env = footsiesgym.make(config=cfg, platform=platform or default_platform())
         self.obs_dim = self.env.observation_space("p1").shape[0]
-        self.n_actions = self.env.action_space("p1").n
+        self.n_actions = int(self.env.action_space("p1").n)  # plain int: torch.load(weights_only=True) rejects numpy scalars
 
         self.t = np.zeros(num_envs, dtype=np.int64)
         self._ep_ret = np.zeros(num_envs)  # raw p1 return of the running episode
