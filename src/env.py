@@ -52,16 +52,18 @@ class FootsiesVecEnv:
         env_config: Optional[dict] = None,
         reward_fn: Optional[Callable] = None,
     ):
+        # With num_envs=1 footsiesgym switches to its single-env mode, whose
+        # outputs have a different shape: not supported by this wrapper.
+        assert num_envs >= 2, "FootsiesVecEnv needs num_envs >= 2"
         cfg = dict(ENV_CONFIG)
         if env_config:
             cfg.update(env_config)
-        cfg["num_envs"] = max(num_envs, 1)
+        cfg["num_envs"] = num_envs
         cfg["port"] = port
         self.port = port
         self.num_envs = num_envs
         self.num_slots = 2 * num_envs
         self.max_t = cfg["max_t"]
-        self.win_reward = cfg["win_reward_scaling_coeff"]
         self.reward_fn = reward_fn
         self.env = footsiesgym.make(config=cfg, platform=platform or default_platform())
         self.obs_dim = self.env.observation_space("p1").shape[0]
