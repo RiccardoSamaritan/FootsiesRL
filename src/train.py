@@ -2,7 +2,7 @@
 
 Examples:
     uv run python src/train.py --total-steps 20000 --num-envs 4      # smoke test
-    uv run python src/train.py  --run-name r0_s1          # full run
+    uv run python src/train.py --run-name lam0.95_s1          # full run
 
 Step counting: one "step" is one game step of one game instance, so an update
 uses num_envs * rollout steps (= 2 * that many agent samples, two per game).
@@ -12,6 +12,7 @@ import csv
 import json
 import os
 import random
+import sys
 import time
 from dataclasses import asdict
 
@@ -35,9 +36,10 @@ def parse_args():
     p.add_argument("--gae-lambda", type=float, default=0.95)
     p.add_argument("--gamma", type=float, default=0.995)
     p.add_argument("--lr", type=float, default=1e-4)
-    p.add_argument("--ent-coef", type=float, default=0.025)
-    p.add_argument("--ent-decay", action="store_true", help="entropy coef -> 0 (start 0.1 unless --ent-coef given)")
+    p.add_argument("--ent-coef", type=float, default=None, help="default 0.025 (fixed) or 0.1 (start value with --ent-decay)")
+    p.add_argument("--ent-decay", action="store_true", help="decay the entropy coefficient linearly to 0")
     p.add_argument("--checkpoint-every", type=int, default=1_000_000, help="steps")
+    p.add_argument("--overwrite", action="store_true", help="reuse an existing run directory")
     p.add_argument("--wandb", action="store_true")
     return p.parse_args()
 
@@ -46,6 +48,8 @@ def main():
     args = parse_args()
     run_name = args.run_name or f"lam{args.gae_lambda}_s{args.seed}"
     run_dir = os.path.join(args.out_dir, run_name)
+    if os.path.exists(os.path.join(run_dir, "log.csv")) and not args.overwrite:
+        sys.exit(f"{run_dir} already has a log.csv: choose another --run-name or pass --overwrite")
     os.makedirs(run_dir, exist_ok=True)
 
     random.seed(args.seed)
@@ -53,9 +57,7 @@ def main():
     torch.manual_seed(args.seed)
     device = torch.device(args.device)
 
-    ent = args.ent_coef
-    if args.ent_decay and "--ent-coef" not in os.sys.argv:
-        ent = 0.1
+    ent = args.ent_coef if args.ent_coef is not None else (0.1 if args.ent_decay else 0.025)
     cfg = PPOConfig(gamma=args.gamma, gae_lambda=args.gae_lambda, lr=args.lr,
                     ent_coef=ent, ent_decay=args.ent_decay)
     with open(os.path.join(run_dir, "config.json"), "w") as f:
@@ -86,8 +88,8 @@ def main():
     steps = 0
     t_start = time.time()
 
-    obs = torch.as_tensor(env.reset(), device=device)
     try:
+        obs = torch.as_tensor(env.reset(), device=device)
         for update in range(1, num_updates + 1):
             frac = 1.0 - (update - 1) / num_updates
             if cfg.anneal_lr:
