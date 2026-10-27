@@ -9,34 +9,50 @@ Examples:
     uv run python src/evaluate.py --agent random --games 1000
     uv run python src/evaluate.py --agent runs/smoke/final.pt --games 200
     uv run python src/evaluate.py --agent footsies_bot --opponents noop back
+    uv run python src/evaluate.py --agent runs/a/final.pt --opponents runs/b/final.pt
 """
 import argparse
 import math
 import os
-import sys
+import socket
+import time
 
 import footsiesgym
+import portpicker
 import torch
 
+from env import ENV_CONFIG as TRAIN_ENV_CONFIG, default_platform
 from opponents import OPPONENTS, Opponent, make_opponent
 from policy import load_policy_opponent
 
-PLATFORM = "mac" if sys.platform == "darwin" else "linux"
+PLATFORM = default_platform()
 
+# Same game settings as training (single source: env.py).
 ENV_CONFIG = {
-    "frame_skip": 4,
-    "action_delay": 8,
-    "max_t": 4000,
-    "win_reward_scaling_coeff": 10.0,
+    **TRAIN_ENV_CONFIG,
     "return_fight_state_in_infos": True,  # needed by FootsiesBot
 }
 
 
-def normal_interval(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
-    """95% normal-approximation interval p +- z * sqrt(p(1-p)/n), clipped to [0, 1]."""
+def wilson_interval(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
+    """95% Wilson score interval for a proportion k/n (well behaved at 0% and 100%)."""
     p = k / n
-    half = z * math.sqrt(p * (1 - p) / n)
-    return max(0.0, p - half), min(1.0, p + half)
+    denom = 1 + z * z / n
+    center = (p + z * z / (2 * n)) / denom
+    half = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / denom
+    return max(0.0, center - half), min(1.0, center + half)
+
+
+def wait_for_server(port: int, timeout: float = 120.0) -> None:
+    """Wait until the game server accepts connections (it can start slowly, e.g. on macOS)."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            socket.create_connection(("127.0.0.1", port), timeout=0.5).close()
+            return
+        except OSError:
+            time.sleep(0.5)
+    raise RuntimeError(f"Footsies server did not start on port {port}")
 
 
 def make_player(spec: str, *, seed: int, frame_skip: int,
@@ -70,18 +86,19 @@ def play_game(env, agent: Opponent, opponent: Opponent, agent_side: str) -> int:
 def evaluate(agent: Opponent, opponent_names: list[str], games: int,
              seed: int = 0) -> list[dict]:
     """Play `games` games against each opponent and return one row per opponent."""
-    env = footsiesgym.make(config=ENV_CONFIG, platform=PLATFORM)
+    port = portpicker.pick_unused_port()
+    env = footsiesgym.make(config={**ENV_CONFIG, "port": port}, platform=PLATFORM)
     rows = []
     try:
+        wait_for_server(port)
         for name in opponent_names:
-            opponent = make_opponent(name, seed=seed,
-                                     frame_skip=ENV_CONFIG["frame_skip"])
+            opponent = make_player(name, seed=seed, frame_skip=ENV_CONFIG["frame_skip"])
             outcomes = [play_game(env, agent, opponent, "p1" if i % 2 == 0 else "p2")
                         for i in range(games)]
             wins, draws, losses = (outcomes.count(1), outcomes.count(0),
                                    outcomes.count(-1))
-            low, high = normal_interval(wins, games)
-            rows.append({"opponent": name, "games": games, "wins": wins,
+            low, high = wilson_interval(wins, games)
+            rows.append({"opponent": os.path.basename(name), "games": games, "wins": wins,
                          "draws": draws, "losses": losses,
                          "win_rate": wins / games, "ci_low": low, "ci_high": high})
             print(f"done: {name}")
@@ -104,7 +121,7 @@ def main():
     p.add_argument("--agent", default="random",
                    help="fixed opponent name or path to a .pt checkpoint")
     p.add_argument("--opponents", nargs="+", default=list(OPPONENTS),
-                   choices=sorted(OPPONENTS))
+                   help=f"fixed opponent names ({sorted(OPPONENTS)}) and/or checkpoint paths")
     p.add_argument("--games", type=int, default=1000,
                    help="games per opponent, sides alternate P1/P2")
     p.add_argument("--seed", type=int, default=0)
