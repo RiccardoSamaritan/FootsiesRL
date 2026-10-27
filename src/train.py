@@ -96,31 +96,48 @@ def main():
                 optimizer.param_groups[0]["lr"] = frac * cfg.lr
             ent_coef = cfg.ent_coef * frac if cfg.ent_decay else cfg.ent_coef
 
+            # Wall-clock time per phase (seconds in this update), to see where
+            # the time goes: game server, policy forward, tensor copies, GAE, SGD.
+            t_policy = t_env = t_copy = 0.0
             for t in range(T):
+                c0 = time.perf_counter()
                 with torch.no_grad():
                     action, logp, _, value = agent.get_action_and_value(obs)
                 obs_buf[t], act_buf[t], logp_buf[t], val_buf[t] = obs, action, logp, value
-                next_obs, rew, term, trunc = env.step(action.cpu().numpy())
+                actions_np = action.cpu().numpy()
+                c1 = time.perf_counter()
+                next_obs, rew, term, trunc = env.step(actions_np)
+                c2 = time.perf_counter()
                 rew_buf[t] = torch.as_tensor(rew, device=device)
                 term_buf[t] = torch.as_tensor(term, device=device)
                 trunc_buf[t] = torch.as_tensor(trunc, device=device)
                 obs = torch.as_tensor(next_obs, device=device)
                 steps += args.num_envs
+                c3 = time.perf_counter()
+                t_policy += c1 - c0
+                t_env += c2 - c1
+                t_copy += c3 - c2
+            c0 = time.perf_counter()
             with torch.no_grad():
                 val_buf[T] = agent.get_value(obs)
 
             adv, ret = compute_gae(rew_buf, val_buf, term_buf, trunc_buf, cfg.gamma, cfg.gae_lambda)
+            t_gae = time.perf_counter() - c0
             batch = {
                 "obs": obs_buf.reshape(-1, env.obs_dim), "actions": act_buf.reshape(-1),
                 "logprobs": logp_buf.reshape(-1), "advantages": adv.reshape(-1),
                 "returns": ret.reshape(-1), "values": val_buf[:-1].reshape(-1),
             }
+            c0 = time.perf_counter()
             stats = ppo_update(agent, optimizer, batch, cfg, ent_coef)
+            t_update = time.perf_counter() - c0
 
             eps = env.pop_finished()
             row = {"update": update, "steps": steps, "time": round(time.time() - t_start, 1),
                    "lr": optimizer.param_groups[0]["lr"], "ent_coef": ent_coef,
                    "episodes": len(eps),
+                   "t_env": t_env, "t_policy": t_policy, "t_copy": t_copy,
+                   "t_gae": t_gae, "t_update": t_update,
                    "ep_len": float(np.mean([e["len"] for e in eps])) if eps else float("nan"),
                    "timeout_rate": float(np.mean([e["truncated"] for e in eps])) if eps else float("nan"),
                    **stats}
@@ -135,7 +152,9 @@ def main():
                 print(f"update {update}/{num_updates} steps {steps} "
                       f"{steps / (time.time() - t_start):.0f} step/s ep_len {row['ep_len']:.0f} "
                       f"timeout {row['timeout_rate']:.2f} ent {stats['entropy']:.3f} "
-                      f"kl {stats['approx_kl']:.4f} ev {stats['explained_var']:.2f}", flush=True)
+                      f"kl {stats['approx_kl']:.4f} ev {stats['explained_var']:.2f} | "
+                      f"time/update: env {t_env:.2f}s policy {t_policy:.2f}s copy {t_copy:.2f}s "
+                      f"gae {t_gae:.2f}s sgd {t_update:.2f}s", flush=True)
 
             if steps >= next_ckpt:
                 save_agent(os.path.join(run_dir, f"ckpt_{steps}.pt"), agent, cfg, env.obs_dim, env.n_actions, steps)

@@ -13,6 +13,12 @@ set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
 mkdir -p slurm/logs
 
+# torch sees every core of the node, not only the ones SLURM gave us:
+# too many threads on a few cores slows the training a lot. Override with
+#   sbatch --export=ALL,THREADS=4 slurm/speedtest.sbatch
+export OMP_NUM_THREADS=${THREADS:-2}
+export MKL_NUM_THREADS=$OMP_NUM_THREADS
+
 # the port must be unique among jobs sharing a node
 PORT=$((45001 + SLURM_JOB_ID % 1000))
 
