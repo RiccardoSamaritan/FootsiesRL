@@ -220,3 +220,4 @@ binaries/
 .DS_Store
 runs/
 .DS_Store
+slurm/logs/
