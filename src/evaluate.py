@@ -93,6 +93,12 @@ def play_game(env, agent: Opponent, opponent: Opponent, agent_side: str) -> int:
             return (reward > 0) - (reward < 0)
 
 
+def _opponent_label(spec: str) -> str:
+    """Name stored in the CSV: a fixed opponent as is, a checkpoint as <run>/<file> (e.g. r1_s1/final)."""
+    p = Path(spec)
+    return f"{p.parent.name}/{p.stem}" if p.suffix == ".pt" else spec
+
+
 def _batchable(player) -> bool:
     """Players that can decide for many games at once (no per-game state, no infos)."""
     return isinstance(player, (PolicyOpponent, RandomOpponent, ConstantActionOpponent))
@@ -173,7 +179,7 @@ def evaluate(agent: Opponent, opponent_names: list[str], games: int,
             wins, draws, losses = (outcomes.count(1), outcomes.count(0),
                                    outcomes.count(-1))
             low, high = wilson_interval(wins, games)
-            rows.append({"opponent": os.path.basename(name), "opponent_spec": name, "games": games, "wins": wins,
+            rows.append({"opponent": _opponent_label(name), "opponent_spec": name, "games": games, "wins": wins,
                          "draws": draws, "losses": losses,
                          "win_rate": wins / games, "ci_low": low, "ci_high": high})
             print(f"done: {name}")
