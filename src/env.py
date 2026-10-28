@@ -37,7 +37,7 @@ def default_platform() -> str:
 class FootsiesVecEnv:
     """2N-slot view of a vectorized FootsiesEnv.
 
-    reward_fn (optional) lets a future rewards module replace the training reward:
+    reward_fn (optional) lets rewards.py replace the training reward:
         reward_fn(env, prev_obs, obs, rewards, terminated, truncated) -> rewards
     where all arrays have shape (2N, ...). ``obs`` of a finished game is the
     reset observation (see above), so a shaper must treat done slots separately.

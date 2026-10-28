@@ -2,7 +2,7 @@
 
 Examples:
     uv run python src/train.py --total-steps 20000 --num-envs 4      # smoke test
-    uv run python src/train.py --run-name lam0.95_s1          # full run
+    uv run python src/train.py --reward r2 --run-name r2_s1       # full run
 
 Step counting: one "step" is one game step of one game instance, so an update
 uses num_envs * rollout steps (= 2 * that many agent samples, two per game).
@@ -20,12 +20,14 @@ import numpy as np
 import torch
 
 from env import FootsiesVecEnv
+from rewards import REWARDS, make_reward
 from ppo import Agent, PPOConfig, compute_gae, ppo_update, save_agent
 
 
 def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--run-name", default=None)
+    p.add_argument("--reward", default="r0", choices=REWARDS, help="training reward variant (see rewards.py)")
     p.add_argument("--out-dir", default="runs")
     p.add_argument("--total-steps", type=int, default=25_000_000)
     p.add_argument("--num-envs", type=int, default=48)
@@ -46,7 +48,7 @@ def parse_args():
 
 def main():
     args = parse_args()
-    run_name = args.run_name or f"lam{args.gae_lambda}_s{args.seed}"
+    run_name = args.run_name or f"{args.reward}_lam{args.gae_lambda}_s{args.seed}"
     run_dir = os.path.join(args.out_dir, run_name)
     if os.path.exists(os.path.join(run_dir, "log.csv")) and not args.overwrite:
         sys.exit(f"{run_dir} already has a log.csv: choose another --run-name or pass --overwrite")
@@ -63,7 +65,8 @@ def main():
     with open(os.path.join(run_dir, "config.json"), "w") as f:
         json.dump({"args": vars(args), "ppo": asdict(cfg)}, f, indent=2)
 
-    env = FootsiesVecEnv(args.num_envs, port=args.port)
+    reward_fn, env_overrides = make_reward(args.reward, gamma=args.gamma)
+    env = FootsiesVecEnv(args.num_envs, port=args.port, env_config=env_overrides, reward_fn=reward_fn)
     S, T = env.num_slots, args.rollout
     agent = Agent(env.obs_dim, env.n_actions, cfg.hidden).to(device)
     optimizer = torch.optim.Adam(agent.parameters(), lr=cfg.lr, eps=1e-5)
