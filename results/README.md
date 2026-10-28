@@ -3,8 +3,11 @@
 Evaluation results: small text files tracked by git (unlike `runs/`, which holds
 checkpoints and training logs and is synced with rsync, see `RSYNC.md`).
 
-`eval.csv` is written by `src/evaluate.py`: one line per agent-opponent pair,
-appended at every evaluation (nothing is overwritten).
+`eval_<run>.csv` (e.g. `eval_r1_s1.csv`) is written by `src/evaluate.py`, one file
+per run, chosen from the checkpoint path (`--out` overrides it): one line per
+agent-opponent pair, appended at every evaluation (nothing is overwritten).
+Agents that are not a run checkpoint go to `eval_other.csv`. `plot_results.py` reads
+every `eval*.csv`.
 
 | Column | Meaning |
 |---|---|

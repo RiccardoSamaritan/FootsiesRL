@@ -11,7 +11,7 @@ Examples:
     uv run python src/evaluate.py --agent footsies_bot --opponents noop back
     uv run python src/evaluate.py --agent runs/a/final.pt --opponents runs/b/final.pt
 
-Results are appended to results/eval.csv (one line per opponent); use --no-save
+Results are appended to results/eval_<run>.csv (one line per opponent); use --no-save
 to only print the table.
 """
 import argparse
@@ -115,7 +115,12 @@ def evaluate(agent: Opponent, opponent_names: list[str], games: int,
     return rows
 
 
-DEFAULT_OUT = Path(__file__).resolve().parent.parent / "results" / "eval.csv"
+RESULTS_DIR = Path(__file__).resolve().parent.parent / "results"
+
+
+def default_out(agent: str) -> Path:
+    """One CSV per run: results/eval_<run>.csv (results/eval_other.csv for a non-run agent)."""
+    return RESULTS_DIR / f"eval_{_run_name(agent) or 'other'}.csv"
 CSV_FIELDS = ["eval_id", "timestamp", "label", "agent", "run", "steps", "opponent",
               "games", "wins", "draws", "losses", "win_rate", "ci_low", "ci_high", "seed"]
 
@@ -207,8 +212,8 @@ def main():
                    help="games per opponent, sides alternate P1/P2")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--device", default="cpu")
-    p.add_argument("--out", default=str(DEFAULT_OUT),
-                   help="CSV file where results are appended (default: results/eval.csv)")
+    p.add_argument("--out", default=None,
+                   help="CSV file where results are appended (default: results/eval_<run>.csv)")
     p.add_argument("--label", default="", help="free text stored with the results (e.g. \"r1 vs fixed opponents\")")
     p.add_argument("--no-save", action="store_true", help="only print the table")
     args = p.parse_args()
@@ -222,6 +227,7 @@ def main():
     rows = evaluate(agent, args.opponents, args.games, args.seed)
     print_table(rows)
     if not args.no_save:
+        args.out = args.out or default_out(args.agent)
         eval_id = save_rows(args.out, args.agent, args.seed, rows, label=args.label,
                             steps=getattr(agent, "steps", None))
         print(f"\nresults appended to {args.out} (eval_id {eval_id})")

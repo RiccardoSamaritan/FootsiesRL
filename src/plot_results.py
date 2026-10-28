@@ -1,4 +1,4 @@
-"""Figures from training logs (runs/<run>/log.csv) and evaluations (results/eval.csv).
+"""Figures from training logs (runs/<run>/log.csv) and evaluations (results/eval_<run>.csv).
 
     uv run python src/plot_results.py                          # every run in runs/
     uv run python src/plot_results.py --runs r0_s1 r1_s1 r2_s1
@@ -113,13 +113,13 @@ def plot_training(runs, runs_dir, out, smooth):
     plt.close(fig)
 
 
-def load_eval(path, runs_dir):
+def load_eval(paths, runs_dir):
     """Latest evaluation of each (run, steps, opponent) against a fixed opponent."""
-    if not path.exists():
-        return []
     final_steps = {}
-    with open(path, newline="") as f:
-        rows = list(csv.DictReader(f))
+    rows = []
+    for path in paths:
+        with open(path, newline="") as f:
+            rows += list(csv.DictReader(f))
     latest = {}
     for r in rows:
         if not r.get("run"):
@@ -187,7 +187,8 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--runs", nargs="*", help="run names (default: every run with a log.csv)")
     p.add_argument("--runs-dir", default=str(ROOT / "runs"))
-    p.add_argument("--eval-csv", default=str(ROOT / "results" / "eval.csv"))
+    p.add_argument("--eval-csv", nargs="*",
+                   help="evaluation CSVs (default: every results/eval*.csv)")
     p.add_argument("--out", default=str(ROOT / "results" / "figures"))
     p.add_argument("--smooth", type=int, default=100, help="moving-average window, in updates")
     args = p.parse_args()
@@ -200,12 +201,14 @@ def main():
     plot_training(runs, runs_dir, out / "training_curves.png", args.smooth)
     print(f"wrote {out / 'training_curves.png'} ({len(runs)} runs)")
 
-    rows = [r for r in load_eval(Path(args.eval_csv), runs_dir) if r["run"] in runs]
+    eval_files = [Path(f) for f in args.eval_csv] if args.eval_csv else \
+        sorted((ROOT / "results").glob("eval*.csv"))
+    rows = [r for r in load_eval(eval_files, runs_dir) if r["run"] in runs]
     if rows:
         plot_eval(rows, runs, out / "eval_curves.png")
         print(f"wrote {out / 'eval_curves.png'} ({len(rows)} evaluations)")
     else:
-        print("no checkpoint evaluations in results/eval.csv yet: eval_curves.png not written")
+        print("no checkpoint evaluations in results/eval_*.csv yet: eval_curves.png not written")
 
 
 if __name__ == "__main__":
