@@ -10,12 +10,18 @@ Examples:
     uv run python src/evaluate.py --agent runs/smoke/final.pt --games 200
     uv run python src/evaluate.py --agent footsies_bot --opponents noop back
     uv run python src/evaluate.py --agent runs/a/final.pt --opponents runs/b/final.pt
+
+Results are appended to results/eval.csv (one line per opponent); use --no-save
+to only print the table.
 """
 import argparse
+import csv
 import math
 import os
 import socket
 import time
+from datetime import datetime
+from pathlib import Path
 
 import footsiesgym
 import portpicker
@@ -98,13 +104,37 @@ def evaluate(agent: Opponent, opponent_names: list[str], games: int,
             wins, draws, losses = (outcomes.count(1), outcomes.count(0),
                                    outcomes.count(-1))
             low, high = wilson_interval(wins, games)
-            rows.append({"opponent": os.path.basename(name), "games": games, "wins": wins,
+            rows.append({"opponent": os.path.basename(name), "opponent_spec": name, "games": games, "wins": wins,
                          "draws": draws, "losses": losses,
                          "win_rate": wins / games, "ci_low": low, "ci_high": high})
             print(f"done: {name}")
     finally:
         env.close()
     return rows
+
+
+DEFAULT_OUT = Path(__file__).resolve().parent.parent / "results" / "eval.csv"
+CSV_FIELDS = ["timestamp", "agent", "opponent", "games", "wins", "draws", "losses",
+              "win_rate", "ci_low", "ci_high", "seed"]
+
+
+def save_rows(path, agent: str, seed: int, rows: list[dict]) -> None:
+    """Append one line per opponent to a CSV (created with a header if missing)."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    new_file = not path.exists()
+    stamp = datetime.now().isoformat(timespec="seconds")
+    with open(path, "a", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=CSV_FIELDS)
+        if new_file:
+            writer.writeheader()
+        for r in rows:
+            writer.writerow({"timestamp": stamp, "agent": agent,
+                             "opponent": r["opponent_spec"], "games": r["games"],
+                             "wins": r["wins"], "draws": r["draws"], "losses": r["losses"],
+                             "win_rate": round(r["win_rate"], 4),
+                             "ci_low": round(r["ci_low"], 4), "ci_high": round(r["ci_high"], 4),
+                             "seed": seed})
 
 
 def print_table(rows: list[dict]) -> None:
@@ -126,6 +156,9 @@ def main():
                    help="games per opponent, sides alternate P1/P2")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--device", default="cpu")
+    p.add_argument("--out", default=str(DEFAULT_OUT),
+                   help="CSV file where results are appended (default: results/eval.csv)")
+    p.add_argument("--no-save", action="store_true", help="only print the table")
     args = p.parse_args()
 
     # Agent and opponents get different seeds so that random vs random
@@ -134,7 +167,11 @@ def main():
     agent = make_player(args.agent, seed=args.seed + 1,
                         frame_skip=ENV_CONFIG["frame_skip"],
                         device=args.device)
-    print_table(evaluate(agent, args.opponents, args.games, args.seed))
+    rows = evaluate(agent, args.opponents, args.games, args.seed)
+    print_table(rows)
+    if not args.no_save:
+        save_rows(args.out, args.agent, args.seed, rows)
+        print(f"\nresults appended to {args.out}")
 
 
 if __name__ == "__main__":
