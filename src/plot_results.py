@@ -34,10 +34,13 @@ OPPONENT_TITLES = {"random": "vs random", "footsies_bot": "vs FootsiesBot",
 
 def run_colors(runs):
     """One color per run: by reward variant (r0..r3), other runs take the next free slots."""
-    colors, spare = {}, iter(SLOTS[4:])
+    colors, spare, taken = {}, iter(SLOTS[4:]), set()
     for run in runs:
         m = re.match(r"(r\d)", run)
-        if m and m.group(1) in REWARD_SLOT:
+        # the first run of a reward variant gets the variant's color; further runs
+        # of the same reward (e.g. a PPO fix on r1) take the next free slot
+        if m and m.group(1) in REWARD_SLOT and m.group(1) not in taken:
+            taken.add(m.group(1))
             colors[run] = SLOTS[REWARD_SLOT[m.group(1)]]
         else:
             colors[run] = next(spare, "#52514e")
