@@ -18,8 +18,10 @@ import argparse
 import csv
 import math
 import os
+import re
 import socket
 import time
+import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -114,27 +116,76 @@ def evaluate(agent: Opponent, opponent_names: list[str], games: int,
 
 
 DEFAULT_OUT = Path(__file__).resolve().parent.parent / "results" / "eval.csv"
-CSV_FIELDS = ["timestamp", "agent", "opponent", "games", "wins", "draws", "losses",
-              "win_rate", "ci_low", "ci_high", "seed"]
+CSV_FIELDS = ["eval_id", "timestamp", "label", "agent", "run", "steps", "opponent",
+              "games", "wins", "draws", "losses", "win_rate", "ci_low", "ci_high", "seed"]
 
 
-def save_rows(path, agent: str, seed: int, rows: list[dict]) -> None:
-    """Append one line per opponent to a CSV (created with a header if missing)."""
+def _run_name(agent: str) -> str:
+    """Run folder of a checkpoint path (runs/<run>/<file>.pt), '' for a fixed opponent."""
+    p = Path(agent)
+    return p.parent.name if p.suffix == ".pt" else ""
+
+
+def _ckpt_steps(agent: str):
+    m = re.search(r"ckpt_(\d+)", Path(agent).stem)
+    return int(m.group(1)) if m else ""
+
+
+def _upgrade_csv(path: Path) -> None:
+    """Rewrite an older CSV (without eval_id/label/run/steps) in the current format.
+
+    Rows written by the same evaluation share a timestamp and get the same eval_id.
+    """
+    with open(path, newline="") as f:
+        reader = csv.DictReader(f)
+        if reader.fieldnames == CSV_FIELDS:
+            return
+        old = list(reader)
+    ids = {}
+    out = []
+    for r in old:
+        stamp = r["timestamp"]
+        key = (stamp, r["agent"])
+        if key not in ids:
+            ids[key] = stamp.replace("-", "").replace(":", "").replace("T", "-") + f"-{len(ids):02d}"
+        out.append({"eval_id": ids[key], "timestamp": stamp, "label": "",
+                    "agent": r["agent"], "run": _run_name(r["agent"]),
+                    "steps": _ckpt_steps(r["agent"]), **{k: r[k] for k in CSV_FIELDS[6:]}})
+    with open(path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=CSV_FIELDS)
+        writer.writeheader()
+        writer.writerows(out)
+
+
+def save_rows(path, agent: str, seed: int, rows: list[dict], label: str = "",
+              steps=None) -> str:
+    """Append one line per opponent to a CSV (created with a header if missing).
+
+    All lines of one call share an eval_id, so each evaluation can be told apart.
+    Returns the eval_id.
+    """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        _upgrade_csv(path)
     new_file = not path.exists()
-    stamp = datetime.now().isoformat(timespec="seconds")
+    now = datetime.now()
+    eval_id = now.strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:4]
+    if steps is None:
+        steps = _ckpt_steps(agent)
     with open(path, "a", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=CSV_FIELDS)
         if new_file:
             writer.writeheader()
         for r in rows:
-            writer.writerow({"timestamp": stamp, "agent": agent,
-                             "opponent": r["opponent_spec"], "games": r["games"],
-                             "wins": r["wins"], "draws": r["draws"], "losses": r["losses"],
-                             "win_rate": round(r["win_rate"], 4),
+            writer.writerow({"eval_id": eval_id, "timestamp": now.isoformat(timespec="seconds"),
+                             "label": label, "agent": agent, "run": _run_name(agent),
+                             "steps": steps, "opponent": r["opponent_spec"],
+                             "games": r["games"], "wins": r["wins"], "draws": r["draws"],
+                             "losses": r["losses"], "win_rate": round(r["win_rate"], 4),
                              "ci_low": round(r["ci_low"], 4), "ci_high": round(r["ci_high"], 4),
                              "seed": seed})
+    return eval_id
 
 
 def print_table(rows: list[dict]) -> None:
@@ -158,6 +209,7 @@ def main():
     p.add_argument("--device", default="cpu")
     p.add_argument("--out", default=str(DEFAULT_OUT),
                    help="CSV file where results are appended (default: results/eval.csv)")
+    p.add_argument("--label", default="", help="free text stored with the results (e.g. \"r1 vs fixed opponents\")")
     p.add_argument("--no-save", action="store_true", help="only print the table")
     args = p.parse_args()
 
@@ -170,8 +222,9 @@ def main():
     rows = evaluate(agent, args.opponents, args.games, args.seed)
     print_table(rows)
     if not args.no_save:
-        save_rows(args.out, args.agent, args.seed, rows)
-        print(f"\nresults appended to {args.out}")
+        eval_id = save_rows(args.out, args.agent, args.seed, rows, label=args.label,
+                            steps=getattr(agent, "steps", None))
+        print(f"\nresults appended to {args.out} (eval_id {eval_id})")
 
 
 if __name__ == "__main__":

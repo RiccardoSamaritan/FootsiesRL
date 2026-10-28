@@ -47,5 +47,7 @@ class PolicyOpponent:
 def load_policy_opponent(path: str, device: str = "cpu") -> PolicyOpponent:
     """Build a PolicyOpponent from a checkpoint saved by ppo.save_agent."""
     agent, ck = load_agent(path, device=device)
-    return PolicyOpponent(agent, ck["obs_dim"], ck["n_actions"], device=device,
-                          name=os.path.basename(path))
+    opponent = PolicyOpponent(agent, ck["obs_dim"], ck["n_actions"], device=device,
+                              name=os.path.basename(path))
+    opponent.steps = int(ck["steps"])  # training steps at the time of the checkpoint
+    return opponent
