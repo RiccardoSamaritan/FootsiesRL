@@ -1,0 +1,16 @@
+eval_id,timestamp,label,agent,run,steps,opponent,games,wins,draws,losses,win_rate,ci_low,ci_high,seed
+20261028-205539-179f,2026-10-28T20:55:39,r1_floor_s1-ckpt_10002432-vec,runs/r1_floor_s1/ckpt_10002432.pt,r1_floor_s1,10002432,random,100,86,0,14,0.86,0.7786,0.9147,0
+20261028-205539-179f,2026-10-28T20:55:39,r1_floor_s1-ckpt_10002432-vec,runs/r1_floor_s1/ckpt_10002432.pt,r1_floor_s1,10002432,noop,100,4,96,0,0.04,0.0157,0.0984,0
+20261028-205539-179f,2026-10-28T20:55:39,r1_floor_s1-ckpt_10002432-vec,runs/r1_floor_s1/ckpt_10002432.pt,r1_floor_s1,10002432,back,100,1,99,0,0.01,0.0018,0.0545,0
+20261028-205648-ef3f,2026-10-28T20:56:48,r1_floor_s1-ckpt_15000576-vec,runs/r1_floor_s1/ckpt_15000576.pt,r1_floor_s1,15000576,random,100,88,0,12,0.88,0.8019,0.93,0
+20261028-205648-ef3f,2026-10-28T20:56:48,r1_floor_s1-ckpt_15000576-vec,runs/r1_floor_s1/ckpt_15000576.pt,r1_floor_s1,15000576,noop,100,15,85,0,0.15,0.0931,0.2328,0
+20261028-205648-ef3f,2026-10-28T20:56:48,r1_floor_s1-ckpt_15000576-vec,runs/r1_floor_s1/ckpt_15000576.pt,r1_floor_s1,15000576,back,100,0,100,0,0.0,0.0,0.037,0
+20261028-205730-96c1,2026-10-28T20:57:30,r1_floor_s1-ckpt_5001216-vec,runs/r1_floor_s1/ckpt_5001216.pt,r1_floor_s1,5001216,random,100,89,0,11,0.89,0.8137,0.9375,0
+20261028-205730-96c1,2026-10-28T20:57:30,r1_floor_s1-ckpt_5001216-vec,runs/r1_floor_s1/ckpt_5001216.pt,r1_floor_s1,5001216,noop,100,100,0,0,1.0,0.963,1.0,0
+20261028-205730-96c1,2026-10-28T20:57:30,r1_floor_s1-ckpt_5001216-vec,runs/r1_floor_s1/ckpt_5001216.pt,r1_floor_s1,5001216,back,100,40,60,0,0.4,0.3094,0.498,0
+20261028-205843-b3d4,2026-10-28T20:58:43,r1_floor_s1-final-vec,runs/r1_floor_s1/final.pt,r1_floor_s1,19998720,random,100,91,0,9,0.91,0.8377,0.9519,0
+20261028-205843-b3d4,2026-10-28T20:58:43,r1_floor_s1-final-vec,runs/r1_floor_s1/final.pt,r1_floor_s1,19998720,noop,100,0,100,0,0.0,0.0,0.037,0
+20261028-205843-b3d4,2026-10-28T20:58:43,r1_floor_s1-final-vec,runs/r1_floor_s1/final.pt,r1_floor_s1,19998720,back,100,0,100,0,0.0,0.0,0.037,0
+20261028-211932-1dcb,2026-10-28T21:19:32,h2h final,runs/r1_floor_s1/final.pt,r1_floor_s1,19998720,runs/r1_s1/final.pt,200,66,99,35,0.33,0.2686,0.3978,0
+20261028-211932-1dcb,2026-10-28T21:19:32,h2h final,runs/r1_floor_s1/final.pt,r1_floor_s1,19998720,runs/r0_s1/final.pt,200,113,15,72,0.565,0.4957,0.6318,0
+20261028-211932-1dcb,2026-10-28T21:19:32,h2h final,runs/r1_floor_s1/final.pt,r1_floor_s1,19998720,runs/r2_s1/final.pt,200,59,138,3,0.295,0.2361,0.3616,0
