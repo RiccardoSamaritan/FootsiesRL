@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "footsies-gym[rllib,training]>=1.0.0",
+    "matplotlib>=3.8",
 ]
 
 [tool.uv]
