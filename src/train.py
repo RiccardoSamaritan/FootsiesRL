@@ -39,6 +39,8 @@ def parse_args():
     p.add_argument("--gamma", type=float, default=0.995)
     p.add_argument("--lr", type=float, default=1e-4)
     p.add_argument("--ent-coef", type=float, default=None, help="default 0.025 (fixed) or 0.1 (start value with --ent-decay)")
+    p.add_argument("--adv-std-floor", type=float, default=0.0,
+                   help="lower bound for the std used to normalize advantages (0 = off)")
     p.add_argument("--ent-decay", action="store_true", help="decay the entropy coefficient linearly to 0")
     p.add_argument("--checkpoint-every", type=int, default=1_000_000, help="steps")
     p.add_argument("--overwrite", action="store_true", help="reuse an existing run directory")
@@ -61,7 +63,8 @@ def main():
 
     ent = args.ent_coef if args.ent_coef is not None else (0.1 if args.ent_decay else 0.025)
     cfg = PPOConfig(gamma=args.gamma, gae_lambda=args.gae_lambda, lr=args.lr,
-                    ent_coef=ent, ent_decay=args.ent_decay)
+                    ent_coef=ent, ent_decay=args.ent_decay,
+                    adv_std_floor=args.adv_std_floor)
     with open(os.path.join(run_dir, "config.json"), "w") as f:
         json.dump({"args": vars(args), "ppo": asdict(cfg)}, f, indent=2)
 

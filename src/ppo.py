@@ -26,6 +26,10 @@ class PPOConfig:
     ent_coef: float = 0.025  # fixed value, or start value of the decay
     ent_decay: bool = False  # if True: ent_coef -> 0 linearly
     norm_adv: bool = True
+    # Lower bound for the std used to normalize advantages. When rewards are ~0 (a stalemate)
+    # the raw advantages have std ~1e-3 and dividing by it turns noise into full-size updates.
+    # 0 = classic normalization (the setting of runs r0-r2).
+    adv_std_floor: float = 0.0
     clip_vloss: bool = False  # value clipping is off: returns are on a +-10 scale
     hidden: int = 256
 
@@ -121,7 +125,7 @@ def ppo_update(agent, optimizer, batch, cfg: PPOConfig, ent_coef: float):
 
             adv = batch["advantages"][idx]
             if cfg.norm_adv:
-                adv = (adv - adv.mean()) / (adv.std() + 1e-8)
+                adv = (adv - adv.mean()) / (adv.std().clamp(min=cfg.adv_std_floor) + 1e-8)
 
             pg1 = -adv * ratio
             pg2 = -adv * torch.clamp(ratio, 1 - cfg.clip_coef, 1 + cfg.clip_coef)
