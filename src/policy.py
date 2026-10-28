@@ -43,6 +43,18 @@ class PolicyOpponent:
         action, _, _, _ = self.agent.get_action_and_value(x)
         return int(action.item())
 
+    @torch.no_grad()
+    def act_batch(self, obs) -> np.ndarray:
+        """Sample one action per row of obs (shape (B, obs_dim)); used by the vectorized evaluation."""
+        obs = np.asarray(obs, dtype=np.float32)
+        if obs.shape[-1] != self.obs_dim:
+            raise ValueError(
+                f"{self.name} was trained on {self.obs_dim}-dim observations "
+                f"but got {obs.shape[-1]}.")
+        x = torch.as_tensor(obs, device=self.device)
+        action, _, _, _ = self.agent.get_action_and_value(x)
+        return action.cpu().numpy()
+
 
 def load_policy_opponent(path: str, device: str = "cpu") -> PolicyOpponent:
     """Build a PolicyOpponent from a checkpoint saved by ppo.save_agent."""

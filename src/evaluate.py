@@ -26,12 +26,14 @@ from datetime import datetime
 from pathlib import Path
 
 import footsiesgym
+import numpy as np
 import portpicker
 import torch
 
-from env import ENV_CONFIG as TRAIN_ENV_CONFIG, default_platform
-from opponents import OPPONENTS, Opponent, make_opponent
-from policy import load_policy_opponent
+from env import ENV_CONFIG as TRAIN_ENV_CONFIG, FootsiesVecEnv, default_platform
+from opponents import (OPPONENTS, ConstantActionOpponent, Opponent,
+                       RandomOpponent, make_opponent)
+from policy import PolicyOpponent, load_policy_opponent
 
 PLATFORM = default_platform()
 
@@ -91,18 +93,83 @@ def play_game(env, agent: Opponent, opponent: Opponent, agent_side: str) -> int:
             return (reward > 0) - (reward < 0)
 
 
+def _batchable(player) -> bool:
+    """Players that can decide for many games at once (no per-game state, no infos)."""
+    return isinstance(player, (PolicyOpponent, RandomOpponent, ConstantActionOpponent))
+
+
+def _act_batch(player, obs: np.ndarray) -> np.ndarray:
+    if isinstance(player, PolicyOpponent):
+        return player.act_batch(obs)
+    if isinstance(player, RandomOpponent):
+        return player.rng.integers(player.num_actions, size=len(obs))
+    return np.full(len(obs), player.action, dtype=np.int64)
+
+
+def play_games_vec(venv: FootsiesVecEnv, agent, opponent, games: int) -> list[int]:
+    """Play `games` games at once on a vectorized env.
+
+    Game slot i is fixed to one side (agent = p1 for even i, p2 for odd i), so
+    sides are balanced. Every slot plays the same number of games (+1 for the
+    first few): the first games to finish are the short ones, so stopping at
+    the first `games` finished episodes would over-count quick wins.
+    Return the outcomes (+1 win, 0 draw, -1 loss) from the agent's side.
+    """
+    n = venv.num_envs
+    agent_is_p1 = np.arange(n) % 2 == 0
+    # slot index (in the 2N stacked layout) of the agent and of the opponent in each game
+    agent_idx = np.where(agent_is_p1, np.arange(n), n + np.arange(n))
+    opp_idx = np.where(agent_is_p1, n + np.arange(n), np.arange(n))
+    quota = np.full(n, games // n) + (np.arange(n) < games % n)
+    played = np.zeros(n, dtype=np.int64)
+    outcomes = []
+
+    agent.reset()
+    opponent.reset()
+    obs = venv.reset()
+    while (played < quota).any():
+        actions = np.zeros(2 * n, dtype=np.int64)
+        actions[agent_idx] = _act_batch(agent, obs[agent_idx])
+        actions[opp_idx] = _act_batch(opponent, obs[opp_idx])
+        obs, rew, term, trunc = venv.step(actions)
+        done = term[:n] | trunc[:n]
+        for i in np.flatnonzero(done):
+            if played[i] >= quota[i]:
+                continue  # extra episode of a slot that already finished its share
+            played[i] += 1
+            r = rew[:n][i] if agent_is_p1[i] else -rew[:n][i]  # p1 reward; zero-sum
+            outcomes.append(int(r > 0) - int(r < 0))
+    return outcomes
+
+
 def evaluate(agent: Opponent, opponent_names: list[str], games: int,
-             seed: int = 0) -> list[dict]:
-    """Play `games` games against each opponent and return one row per opponent."""
-    port = portpicker.pick_unused_port()
-    env = footsiesgym.make(config={**ENV_CONFIG, "port": port}, platform=PLATFORM)
+             seed: int = 0, parallel: int = 48) -> list[dict]:
+    """Play `games` games against each opponent and return one row per opponent.
+
+    Players that decide independently per game (checkpoints, random, noop, back) are
+    evaluated on a vectorized env with up to `parallel` simultaneous games. The
+    others (footsies_bot needs the fight state in infos, only given by a single env)
+    play one game at a time.
+    """
+    n_par = max(2, min(parallel, games) // 2 * 2)  # even, >= 2
+    venv = single = None
     rows = []
     try:
-        wait_for_server(port)
         for name in opponent_names:
             opponent = make_player(name, seed=seed, frame_skip=ENV_CONFIG["frame_skip"])
-            outcomes = [play_game(env, agent, opponent, "p1" if i % 2 == 0 else "p2")
-                        for i in range(games)]
+            if _batchable(agent) and _batchable(opponent):
+                if venv is None:
+                    port = portpicker.pick_unused_port()
+                    venv = FootsiesVecEnv(n_par, port=port, platform=PLATFORM)
+                outcomes = play_games_vec(venv, agent, opponent, games)
+            else:
+                if single is None:
+                    port = portpicker.pick_unused_port()
+                    single = footsiesgym.make(config={**ENV_CONFIG, "port": port},
+                                              platform=PLATFORM)
+                    wait_for_server(port)
+                outcomes = [play_game(single, agent, opponent, "p1" if i % 2 == 0 else "p2")
+                            for i in range(games)]
             wins, draws, losses = (outcomes.count(1), outcomes.count(0),
                                    outcomes.count(-1))
             low, high = wilson_interval(wins, games)
@@ -111,7 +178,9 @@ def evaluate(agent: Opponent, opponent_names: list[str], games: int,
                          "win_rate": wins / games, "ci_low": low, "ci_high": high})
             print(f"done: {name}")
     finally:
-        env.close()
+        for e in (venv, single):
+            if e is not None:
+                e.close()
     return rows
 
 
@@ -211,6 +280,8 @@ def main():
     p.add_argument("--games", type=int, default=1000,
                    help="games per opponent, sides alternate P1/P2")
     p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--parallel", type=int, default=48,
+                   help="games played at the same time (vectorized env)")
     p.add_argument("--device", default="cpu")
     p.add_argument("--out", default=None,
                    help="CSV file where results are appended (default: results/eval_<run>.csv)")
@@ -224,7 +295,7 @@ def main():
     agent = make_player(args.agent, seed=args.seed + 1,
                         frame_skip=ENV_CONFIG["frame_skip"],
                         device=args.device)
-    rows = evaluate(agent, args.opponents, args.games, args.seed)
+    rows = evaluate(agent, args.opponents, args.games, args.seed, args.parallel)
     print_table(rows)
     if not args.no_save:
         args.out = args.out or default_out(args.agent)
