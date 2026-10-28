@@ -14,3 +14,4 @@ eval_id,timestamp,label,agent,run,steps,opponent,games,wins,draws,losses,win_rat
 20261028-211932-1dcb,2026-10-28T21:19:32,h2h final,runs/r1_floor_s1/final.pt,r1_floor_s1,19998720,runs/r1_s1/final.pt,200,66,99,35,0.33,0.2686,0.3978,0
 20261028-211932-1dcb,2026-10-28T21:19:32,h2h final,runs/r1_floor_s1/final.pt,r1_floor_s1,19998720,runs/r0_s1/final.pt,200,113,15,72,0.565,0.4957,0.6318,0
 20261028-211932-1dcb,2026-10-28T21:19:32,h2h final,runs/r1_floor_s1/final.pt,r1_floor_s1,19998720,runs/r2_s1/final.pt,200,59,138,3,0.295,0.2361,0.3616,0
+20261028-213835-8648,2026-10-28T21:38:35,r1_floor_s1-final-bot,runs/r1_floor_s1/final.pt,r1_floor_s1,19998720,footsies_bot,100,84,0,16,0.84,0.7558,0.899,0
