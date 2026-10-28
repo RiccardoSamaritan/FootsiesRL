@@ -1,6 +1,6 @@
 Bozza di progetto – Footsies RL
 Bozza di progetto – Footsies RL
-Oct 19, 2026 · @Utente claude 1
+Oct 28, 2026
 Obiettivo e domanda di ricerca
 Il progetto addestra agenti per Footsies con un solo algoritmo, PPO in self-play, e studia
 come la funzione di reward cambia ciò che l'agente impara, misurandone forza e
@@ -60,17 +60,19 @@ Terminazione. Un episodio termina quando un giocatore è sconfitto ( is_dead ; s
 paper, quando è colpito da un attacco speciale) oppure è troncato a 4000 passi, circa 267
 secondi di gioco a 60 Hz: in quel caso entrambi ricevono 0. Le due cose vanno trattate in
 modo diverso nel PPO: alla sconfitta il valore dello stato successivo è zero, alla troncatura
-si fa bootstrap con il valore stimato dal critico, altrimenti si introduce un bias perché lo
-stato non è davvero terminale (vedi Bias e varianza).
+si fa bootstrap con il valore stimato dal critico (l'ambiente vettorizzato sostituisce l'ultima
+osservazione con quella di reset, quindi come approssimazione si usa V dell'osservazione
+precedente), altrimenti si introduce un bias perché lo stato non è davvero terminale (vedi
+Bias e varianza).
 Funzione di reward: perché, limiti e conseguenze
 Cosa è definito. Il reward è a somma zero: +w al vincitore e -w allo sconfitto (w =
 win_reward_scaling_coeff ), 0 a entrambi al timeout. Opzionalmente
 guard_break_reward x: a ogni calo della guardia dell'avversario (stando al codice, a ogni
 attacco bloccato) l'attaccante riceve +x e il difensore -x, con il vincolo 3x < w; con
-use_reward_budget lo shaping viene sottratto dal premio finale, così il totale di una
 Page 2 of 13
 
 Bozza di progetto – Footsies RL
+use_reward_budget lo shaping viene sottratto dal premio finale, così il totale di una
 partita vinta non supera w. Attenzione: nel paper il default è w = 10, ma nella libreria
 installata win_reward_scaling_coeff vale 1,0, quindi va impostato esplicitamente a 10
 (oggi train_ppo.py non lo fa).
@@ -116,14 +118,15 @@ Configurazione di base: frame_skip 4, action_delay 8, max_t 4000, reward di
 vittoria 10 (valore del paper; il default della libreria installata è 1,0, quindi va impostato
 `win_reward_scaling_coeff` a 10). Le variazioni (delay, carica speciale, reward denso)
 sono leve per gli esperimenti.
-Dove si lavora: sviluppo e test brevi sul Mac ( platform="mac" ), run lunghe sul server
-Linux con GPU ( platform="linux" ). Windows non è supportato.
+Dove si lavora: sviluppo e test brevi sul Mac ( platform="mac" ), run lunghe sul cluster
+Orfeo (SLURM, partizione THIN, senza GPU perché la rete è piccola)
+( platform="linux" ). Windows non è supportato.
 Librerie: PyTorch. PPO, wrapper di reward, valutazione e avversari sono scritti da noi;
 RLlib resta solo come baseline di riferimento (train_ppo.py) per validare la nostra
 implementazione.
-Da verificare subito: la compatibilità di PyTorch e della libreria dell'ambiente con la
-versione di Python usata nella .venv (3.14), che è molto recente; se dà problemi si
-fissa una versione supportata con uv (uv python pin) e si ricrea l'ambiente con uv sync.
+Versione di Python: fissata a 3.12 con .python-version , la stessa su Mac e su Orfeo.
+PyTorch e la libreria dell'ambiente funzionano con questa versione (verificato su
+entrambi).
 Avversari fissi (scala di difficoltà)
 Servono quattro avversari, dal più debole al più forte, per dare un'unità di misura comune a
 tutte le valutazioni; il progetto Briscola ne usava cinque. Tre sono banali da scrivere
@@ -142,10 +145,10 @@ FootsiesBot IA a regole del gioco originale Livello contro un benchmark usato
 FootsiesBot (footsiesgym/footsies/game/footsies_bot.py) usa lo stato della partita e un
 po' di casualità, quindi è il più vicino a come gioca un umano. Non è una rete: prende lo
 stato della partita, quindi serve un adattatore, già scritto in src/opponents.py
-(FootsiesBotOpponent). Funziona solo con return_fight_state_in_infos=True e
 Page 4 of 13
 
 Bozza di progetto – Footsies RL
+(FootsiesBotOpponent). Funziona solo con return_fight_state_in_infos=True e
 num_envs=1, perché con gli ambienti vettorizzati le info sono vuote: si usa quindi nella
 valutazione, un ambiente alla volta, e non nel training vettorizzato. Copre solo le 6 azioni
 base.
@@ -158,8 +161,13 @@ GAE, loss con clipping più termine di valore e bonus di entropia, 8 epoche su m
 Nel self-play semplice la stessa rete gioca entrambi i lati e usa i dati di entrambi i giocatori;
 nel pool si usano solo i dati del lato che sta imparando. La baseline RLlib già presente
 ( train_ppo.py ) resta come riferimento: prima di fidarsi del nostro codice si controlla che
-le curve contro il Random siano simili. Collegamento al libro: vantaggio e actor-critic (cap.
-9.3.2-9.3.3); GAE e clipping non sono nel libro.
+le curve contro il Random siano simili. Si parte dall'esempio CleanRL ufficiale di
+FootsiesGym (adattato da ppo_pettingzoo_ma_atari): ha già l'ambiente vettorizzato con
+slot p1 e p2 che condividono la rete, GAE, loss e le metriche di diagnostica (varianza
+esplicata, KL, frazione di clipping). Si cambiano iperparametri (learning rate 1e-4, rollout
+64, entropia come da paper), trattamento della troncatura, reward e valutazione.
+Collegamento al libro: vantaggio e actor-critic (cap. 9.3.2-9.3.3); GAE e clipping non sono
+nel libro.
 1. PPO con self-play semplice. Iperparametri di partenza dal paper: rete MLP 2×256 con
 ReLU, gamma 0,995, GAE lambda 0,95, clip 0,3, 8 epoche con 8 minibatch, rollout di 64
 passi, 48 ambienti in parallelo, learning rate 1e-4 che decresce a 0, ottimizzatore Adam,
@@ -177,11 +185,11 @@ curriculum e non un PFSP, quindi resta solo come spunto.
 Scala degli esperimenti. Il paper usa 25 milioni di step per 5 seed. Per il progetto si usa un
 solo seed per run, scelta dichiarata nella sezione Valutazione. Questo libera budget: il
 numero di step per run si fissa dopo aver misurato la velocità reale di addestramento (vedi
-Budget di calcolo), anche fino ai 25 milioni del paper se ci sta. Se serve semplificare, si
-riducono prima ablation e best response.
 Page 5 of 13
 
 Bozza di progetto – Footsies RL
+Budget di calcolo), anche fino ai 25 milioni del paper se ci sta. Se serve semplificare, si
+riducono prima ablation e best response.
 Bias e varianza nell'algoritmo
 In RL bias e varianza hanno un significato diverso dall'apprendimento supervisionato: non
 riguardano la complessità del modello, ma la qualità dello stimatore del target che guida
@@ -215,6 +223,11 @@ GAE con lambda media pesata intermedio: intermedia 6 (spettro
 | 0,995        | efficace di | ritorno scontato,   |           |           |
 |              | circa 200   | non il vincere      |           |           |
 passi
+Page 6 of 13
+
+Bozza di progetto – Footsies RL
+| Scelta | Effetto | Bias | Varianza | Libro |
+| ------ | ------- | ---- | -------- | ----- |
 Clipping e 8 riusa gli stessi sì: si ottimizza più bassa per 5 (off-
 epoche (epsilon dati più volte una surrogata, campione; il policy); PPO
 | 0,3) |     | non il gradiente | rapporto di     | non è nel |
@@ -222,17 +235,15 @@ epoche (epsilon dati più volte una surrogata, campione; il policy); PPO
 |      |     | esatto           | importanza è la | libro     |
 fonte di varianza
 off-policy
-Page 6 of 13
-
-Bozza di progetto – Footsies RL
-Scelta Effetto Bias Varianza Libro
-Bonus di spinge verso sì, voluto; non la riduce
-entropia policy più sparisce alla fine direttamente
-casuali nella variante
+| Bonus di | spinge verso | sì, voluto;        | non la riduce |     |
+| -------- | ------------ | ------------------ | ------------- | --- |
+| entropia | policy più   | sparisce alla fine | direttamente  |     |
+|          | casuali      | nella variante     |               |     |
 decrescente (0,1
 a 0)
-Troncatura a se trattata sì; si evita con il
-4000 passi come fine bootstrap su V
+| Troncatura a | se trattata | sì; si evita con il |     |     |
+| ------------ | ----------- | ------------------- | --- | --- |
+| 4000 passi   | come fine   | bootstrap su V      |     |     |
 vera
 Come si legge per PPO. PPO parte dall'actor-critic (cap. 9.3.3), che abbassa la varianza di
 REINFORCE a prezzo del bias del critico, e con GAE regola il compromesso con un solo
@@ -253,12 +264,12 @@ lambda 1 più lento e rumoroso (varianza), lambda 0 più stabile ma più facilme
 su policy peggiori (bias). Lo stesso vocabolario vale per la valutazione: la best response
 approssimata dà un bias per difetto sulla sfruttabilità, e un solo seed non permette di
 stimare la varianza tra addestramenti.
-Valutazione e metriche
-Ogni agente è valutato su tre livelli (contro avversari fissi, in scontro diretto e contro una
-best response), perché il solo win rate contro euristiche nasconde la sfruttabilità.
 Page 7 of 13
 
 Bozza di progetto – Footsies RL
+Valutazione e metriche
+Ogni agente è valutato su tre livelli (contro avversari fissi, in scontro diretto e contro una
+best response), perché il solo win rate contro euristiche nasconde la sfruttabilità.
 Livello Come Cosa dice
 Avversari fissi 1000 partite per avversario, lati Livello di abilità sulla scala di
 P1 e P2 alternati, win/draw/loss difficoltà
@@ -289,41 +300,41 @@ per difetto la sfruttabilità reale; va detto nella relazione.
 Metrica comune. Il ritorno non si può confrontare tra reward diverse: tutte le varianti si
 giudicano con win rate contro gli avversari fissi, scontro diretto e best response,
 misurati con il reward terminale (anche la best response si addestra con quello).
+Page 8 of 13
+
+Bozza di progetto – Footsies RL
 Esperimenti e ablation
 Il nucleo sono due confronti, le funzioni di reward e il compromesso bias-varianza; le
 ablation sull'ambiente e le estensioni si aggiungono in ordine di priorità se resta tempo di
 calcolo.
-Page 8 of 13
-
-Bozza di progetto – Footsies RL
-| Priorità | Esperimento | Cosa varia |     | Domanda |
-| -------- | ----------- | ---------- | --- | ------- |
+| Priorità | Esperimento | Cosa varia | Domanda |
+| -------- | ----------- | ---------- | ------- |
 Core Reward terminale; denso sulla guardia con Quale reward produce
-|      |          | budget; shaping a potenziale; |     | l'agente più forte e     |
-| ---- | -------- | ----------------------------- | --- | ------------------------ |
-|      |          | vittoria scalata sul tempo    |     | meno sfruttabile?        |
-| Core | Bias e   | GAE lambda 0 e 1 contro 0,95; |     | Come cambiano            |
-|      | varianza | gamma 0,99 contro 0,995       |     | velocità e stabilità con |
+|      |          | budget; shaping a potenziale; | l'agente più forte e     |
+| ---- | -------- | ----------------------------- | ------------------------ |
+|      |          | vittoria scalata sul tempo    | meno sfruttabile?        |
+| Core | Bias e   | GAE lambda 0 e 1 contro 0,95; | Come cambiano            |
+|      | varianza | gamma 0,99 contro 0,995       | velocità e stabilità con |
 più bias (TD) o più
 varianza (Monte
 Carlo)?
 Secondaria Entropia fissa (0,025) contro decrescente La regolarizzazione
-|     |     | (0,1 a 0) |     | aiuta la robustezza? |
-| --- | --- | --------- | --- | -------------------- |
+|     |     | (0,1 a 0) | aiuta la robustezza? |
+| --- | --- | --------- | -------------------- |
 Secondaria Azione di use_special_charge_action L'agente scopre e usa
-|     | carica | on/off |     | le mosse speciali? |
-| --- | ------ | ------ | --- | ------------------ |
+|     | carica | on/off | le mosse speciali? |
+| --- | ------ | ------ | ------------------ |
 Secondaria Ritardo action_delay  0, 8, 12 Con delay 0 il gioco
-|     | d'azione |     |     | diventa reattivo e |
-| --- | -------- | --- | --- | ------------------ |
+|     | d'azione |     | diventa reattivo e |
+| --- | -------- | --- | ------------------ |
 fragile, come nel
 paper?
 Facoltativa Pool di self-play contro snapshot passati Il pool riduce la
-|     | checkpoint | con campionamento prioritario |     | sfruttabilità? |
-| --- | ---------- | ----------------------------- | --- | -------------- |
+|     | checkpoint | con campionamento prioritario | sfruttabilità? |
+| --- | ---------- | ----------------------------- | -------------- |
 Facoltativa Penalità sul penalità simmetrica, fuori dalla Scoraggia la passività,
-|     | timeout | somma zero |     | e cosa perde la |
-| --- | ------- | ---------- | --- | --------------- |
+|     | timeout | somma zero | e cosa perde la |
+| --- | ------- | ---------- | --------------- |
 valutazione?
 Tutte le run usano un solo seed, quindi i risultati sono descrittivi. Tutte le run usano la
 stessa rete di base, così che le differenze si attribuiscano alla variabile cambiata.
@@ -331,15 +342,13 @@ Budget di calcolo
 Con un solo seed le run sono 15 (23 con 3 best response per agente), ma il tempo di
 ciascuna dipende dalla velocità reale di addestramento: il primo passo è misurarla e poi
 decidere quanti step per run ci stanno. Unità di costo: S = step di una run PPO.
-| Gruppo di run                                     |     |     | N. run | Costo |
-| ------------------------------------------------- | --- | --- | ------ | ----- |
-| Confronto reward: 4 funzioni di reward con PPO, 1 |     |     | 4      | 4 S   |
-seed ciascuna
-Best response: 1 per agente finale (3 per agente) 4 (12) 2 S (6 S)
 Page 9 of 13
 
 Bozza di progetto – Footsies RL
 Gruppo di run N. run Costo
+Confronto reward: 4 funzioni di reward con PPO, 1 4 4 S
+seed ciascuna
+Best response: 1 per agente finale (3 per agente) 4 (12) 2 S (6 S)
 Bias e varianza: lambda 0 e 1, gamma 0,99 3 3 S
 Ablation secondarie: entropia decrescente, carica 4 4 S
 speciale, delay 0 e 12
@@ -349,10 +358,16 @@ estensioni facoltative (pool, penalità sul timeout) non sono nel totale e costa
 ciascuna più la best response. Con S = 5 milioni di step il totale è 65 milioni (85 milioni con
 3 best response per agente); con S = 25 milioni, come nel paper, è 325 milioni (425 milioni).
 Le velocità del paper (circa 19.000 step/s con un processo, circa 52.500 con 4 processi)
-misurano solo il simulatore, non l'addestramento della rete, che è più lento. Si misura
-quindi il tempo di una run PPO completa sul server; il tempo totale è gli step totali divisi
-per la velocità misurata, ripartiti sulle run eseguibili in parallelo. Se non ci sta, si taglia in
-quest'ordine: ablation facoltative, best response a 1 seed, step per run.
+misurano solo il simulatore, non l'addestramento della rete. Misurate sul nostro PPO
+completo (48 partite, 3.072 step per update): circa 6.700 step/s sul Mac e circa 4.050 su un
+nodo THIN di Orfeo con 4 thread. Quattro job contemporanei su THIN fanno 3.800-4.500
+step/s ciascuno, senza rallentamenti. Il tempo si divide tra aggiornamento della rete (56%
+sul Mac, 63% su Orfeo) e simulatore (37% e 25%). Una run da 25 milioni di step dura
+quindi circa 1 ora sul Mac e 1,7 ore su THIN (2,2 su GENOA). GENOA fa circa 3.100 step/s,
+stabili su 3 job, ed è la seconda scelta; EPYC è la più lenta (circa 750 step/s, misurata con
+una versione precedente del codice) e non si usa. Il piano gira su Orfeo con un job per run,
+in parallelo: il tempo reale è circa quello di una run più la coda, non la somma. Se non ci sta,
+si taglia in quest'ordine: ablation facoltative, best response a 1 seed, step per run.
 Diagnostica e analisi del comportamento
 Le percentuali di vittoria non bastano a capire cosa ha imparato l'agente, quindi si
 registrano e si analizzano le partite, come nella parte di diagnostica del progetto Briscola.
@@ -363,6 +378,9 @@ Uso delle mosse speciali: numero medio per partita, che nel paper è quasi zero 
 le azioni di carica.
 Iniziativa contro il no-op: l'agente ingaggia l'avversario fermo o resta passivo? Il paper
 segnala che i policy migliori diventano sempre più reattivi.
+Page 10 of 13
+
+Bozza di progetto – Footsies RL
 Video di alcune partite con la build grafica ( visual_test.py mostra come aprirla), da
 usare nelle slide.
 Diagnostica di bias e varianza: varianza esplicata del critico, deviazione standard del
@@ -370,9 +388,6 @@ vantaggio per batch, KL e frazione di campioni tagliati dal clipping, registrate
 aggiornamento.
 Questa parte è quella che più aiuta all'orale: permette di dire cosa fa l'agente e perché, non
 solo quanto vince.
-Page 10 of 13
-
-Bozza di progetto – Footsies RL
 Collegamento con il libro del corso
 Ogni scelta del progetto si appoggia a un capitolo delle dispense, da citare esplicitamente
 in relazione e all'orale.
@@ -396,14 +411,14 @@ bias)
 PFSP e la best response non sono nel libro (il cap. 11 ne dà solo l'idea generale). PPO è
 scritto da noi come evoluzione dell'actor-critic (cap. 9.3.2-9.3.3): aggiornamenti limitati dal
 clipping, motivati dall'alta varianza del policy gradient puro (REINFORCE, cap. 9.3). GAE e
+Page 11 of 13
+
+Bozza di progetto – Footsies RL
 clipping non sono nel libro e vanno spiegati a parte; PFSP e la best response sono
 applicazioni delle idee del cap. 11.
 Struttura della repo e consegne
 Le consegne sono il codice con un README riproducibile e la presentazione per l'orale,
 entrambe costruite sulla repo già esistente.
-Page 11 of 13
-
-Bozza di progetto – Footsies RL
 FootsiesRL/
 README.md come installare, lanciare train e valutazione
 pyproject.toml, uv.lock dipendenze gestite con uv (uv sync, uv run)
@@ -435,15 +450,15 @@ miglioramenti).
 Calendario, rischi e limiti
 Il lavoro procede in sei fasi; le date dipendono dalla scadenza dell'esame, che non conosco,
 e si fissano appena la indichi.
+Page 12 of 13
+
+Bozza di progetto – Footsies RL
 1. Setup e verifica dell'ambiente (versione di Python), misura della velocità reale di
 addestramento sul server, avversari fissi e valutazione di base.
 2. Implementazione di PPO e validazione contro la baseline RLlib, poi self-play semplice e
 prime curve di apprendimento.
 3. Varianti di reward (potenziale, vittoria scalata sul tempo) e confronto con la reward
 terminale.
-Page 12 of 13
-
-Bozza di progetto – Footsies RL
 4. Best response e matrice degli scontri diretti.
 5. Bias e varianza (lambda, gamma), ablation secondarie e diagnostica del
 comportamento.
