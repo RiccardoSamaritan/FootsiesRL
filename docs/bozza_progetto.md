@@ -8,14 +8,14 @@ Il progetto addestra agenti per Footsies con un solo algoritmo, PPO in self-play
 
 La domanda guida è: **un agente che vince contro avversari semplici è anche difficile da sfruttare?** Il paper di FootsiesGym mostra che le due cose possono divergere (un metodo può battere gli altri in scontro diretto ed essere comunque il più sfruttabile). Il progetto riproduce in piccolo questa analisi, cambiando la funzione di reward con lo stesso algoritmo, e la collega alla teoria del corso (modellazione, bias e varianza).
 
-Il confronto principale è tra quattro funzioni di reward con lo stesso PPO, scritto da noi in PyTorch (senza RLlib):
+Il punto di partenza sono le due baseline PPO del paper, entrambe con il reward terminale: PPO con entropia fissa (0,025) e PPO (Sched.) con entropia che scende da 0,1 a 0. Sopra queste, il confronto principale è tra quattro funzioni di reward con lo stesso PPO, scritto da noi in PyTorch (senza RLlib):
 
 1. **Reward terminale**: ±w alla vittoria o sconfitta, 0 al timeout (baseline).
 2. **Reward denso sulla guardia con budget**: bonus a ogni calo della guardia dell'avversario, sottratto dal premio finale (già nella libreria).
 3. **Shaping basato su potenziale**: da scrivere come wrapper; in teoria non cambia la policy ottima.
 4. **Vittoria scalata sul tempo**: vincere prima vale di più, resta a somma zero (wrapper).
 
-Il pool di checkpoint (PFSP), l'entropia decrescente e le altre ablation sono estensioni se resta budget (vedi Esperimenti e ablation).
+Il pool di checkpoint (PFSP) e le altre ablation sono estensioni se resta budget (vedi Esperimenti e ablation).
 
 ## Perché Footsies e formulazione come POMDP
 
@@ -80,7 +80,7 @@ Gli agenti condividono osservazione, azioni, rete e iperparametri di PPO e diffe
 
 **Implementazione: PPO scritto da noi (PyTorch).** Rete MLP 2×256 con ReLU e due teste (policy e valore), raccolta su ambienti vettorizzati della libreria (`num_envs`), vantaggio con GAE, loss con clipping più termine di valore e bonus di entropia, 8 epoche su minibatch. Nel self-play semplice la stessa rete gioca entrambi i lati e usa i dati di entrambi i giocatori; nel pool si usano solo i dati del lato che sta imparando. La baseline RLlib già presente (`train_ppo.py`) resta come riferimento: prima di fidarsi del nostro codice si controlla che le curve contro il Random siano simili. Si parte dall'esempio CleanRL ufficiale di FootsiesGym (adattato da ppo\_pettingzoo\_ma\_atari): ha già l'ambiente vettorizzato con slot p1 e p2 che condividono la rete, GAE, loss e le metriche di diagnostica (varianza esplicata, KL, frazione di clipping). Si cambiano iperparametri (learning rate 1e-4, rollout 64, entropia come da paper), trattamento della troncatura, reward e valutazione. Collegamento al libro: vantaggio e actor-critic (cap. 9.3.2-9.3.3); GAE e clipping non sono nel libro.
 
-**1. PPO con self-play semplice.** Iperparametri di partenza dal paper: rete MLP 2×256 con ReLU, gamma 0,995, GAE lambda 0,95, clip 0,3, 8 epoche con 8 minibatch, rollout di 64 passi, 48 ambienti in parallelo, learning rate 1e-4 che decresce a 0, ottimizzatore Adam, coefficiente della value loss 1,0, norma massima del gradiente 0,5 (Tabella 3 del paper). Il coefficiente di entropia è fisso (0,025) in tutte le run sul confronto delle reward; la variante decrescente (da 0,1 a 0) è un'ablation secondaria.
+**1. PPO con self-play semplice.** Iperparametri di partenza dal paper: rete MLP 2×256 con ReLU, gamma 0,995, GAE lambda 0,95, clip 0,3, 8 epoche con 8 minibatch, rollout di 64 passi, 48 ambienti in parallelo, learning rate 1e-4 che decresce a 0, ottimizzatore Adam, coefficiente della value loss 1,0, norma massima del gradiente 0,5 (Tabella 3 del paper). Le due baseline del paper si addestrano entrambe con il reward terminale: PPO con coefficiente di entropia fisso (0,025) e PPO (Sched.) con entropia che scende linearmente da 0,1 a 0. Le varianti di reward si confrontano con entropia fissa (0,025), così la sola variabile è il reward.
 
 **2. Estensione facoltativa: PPO con pool di checkpoint.** Ogni partita è giocata contro la policy corrente con probabilità 0,8 e contro uno snapshot del pool altrimenti. Gli snapshot (fino a 16, uno ogni circa 614.000 step) sono scelti con peso proporzionale a (1 - p\_i)^(1/2), dove p\_i è la frequenza di vittoria stimata contro lo snapshot i: si gioca di più contro chi ci batte. Con il PPO scritto da noi la scelta dell'avversario è un campionamento fatto a ogni reset dell'ambiente, senza toccare learner o moduli. L'esempio di RLlib (MixManagerCallback) aggiunge avversari quando il win rate supera una soglia: è un curriculum e non un PFSP, quindi resta solo come spunto.
 
@@ -135,7 +135,7 @@ Il paper usa PPO in self-play con gli stessi iperparametri del nostro progetto, 
 
 | Aspetto | Paper | Questo progetto |
 | --- | --- | --- |
-| Algoritmi | PPO (entropia fissa 0,025), PPO (Sched.) (entropia da 0,1 a 0), EMAgnet, PFSP | PPO scritto da noi con entropia fissa; la variante decrescente come ablation; PFSP come estensione facoltativa; niente EMAgnet |
+| Algoritmi | PPO (entropia fissa 0,025), PPO (Sched.) (entropia da 0,1 a 0), EMAgnet, PFSP | PPO scritto da noi, con entropia fissa e Sched. come nel paper (reward terminale); PFSP come estensione facoltativa; niente EMAgnet |
 | Step e seed | 25 milioni di step, 5 seed | 20 milioni di step (limite di 2 ore per job su Orfeo), 1 seed |
 | Reward | terminale ±10, timeout 0 | R0 identico al paper; R1 guard break, R2 shaping a potenziale, R3 vittoria scalata nel tempo |
 | Avversari fissi | random e no-op | random, no-op, back e FootsiesBot |
@@ -146,13 +146,13 @@ Il paper usa PPO in self-play con gli stessi iperparametri del nostro progetto, 
 
 ## Esperimenti e ablation
 
-Il nucleo sono due confronti, le funzioni di reward e il compromesso bias-varianza; le ablation sull'ambiente e le estensioni si aggiungono in ordine di priorità se resta tempo di calcolo.
+Il nucleo sono tre confronti: le due baseline del paper, le funzioni di reward e il compromesso bias-varianza; le ablation sull'ambiente e le estensioni si aggiungono in ordine di priorità se resta tempo di calcolo.
 
 | Priorità | Esperimento | Cosa varia | Domanda |
 | --- | --- | --- | --- |
+| Core | Baseline del paper | PPO con entropia fissa (0,025) contro PPO (Sched.) (0,1 a 0), entrambe con reward terminale | La schedule di entropia cambia lo stallo e la robustezza, come nel paper? |
 | Core | Reward | terminale; denso sulla guardia con budget; shaping a potenziale; vittoria scalata sul tempo | Quale reward produce l'agente più forte e meno sfruttabile? |
 | Core | Bias e varianza | GAE lambda 0 e 1 contro 0,95; gamma 0,99 contro 0,995 | Come cambiano velocità e stabilità con più bias (TD) o più varianza (Monte Carlo)? |
-| Secondaria | Entropia | fissa (0,025) contro decrescente (0,1 a 0) | La regolarizzazione aiuta la robustezza? |
 | Secondaria | Azione di carica | `use_special_charge_action` on/off | L'agente scopre e usa le mosse speciali? |
 | Secondaria | Ritardo d'azione | `action_delay` 0, 8, 12 | Con delay 0 il gioco diventa reattivo e fragile, come nel paper? |
 | Facoltativa | Pool di checkpoint | self-play contro snapshot passati con campionamento prioritario | Il pool riduce la sfruttabilità? |
@@ -169,7 +169,8 @@ Con un solo seed le run sono 15 (23 con 3 best response per agente), ma il tempo
 | Confronto reward: 4 funzioni di reward con PPO, 1 seed ciascuna | 4 | 4 S |
 | Best response: 1 per agente finale (3 per agente) | 4 (12) | 2 S (6 S) |
 | Bias e varianza: lambda 0 e 1, gamma 0,99 | 3 | 3 S |
-| Ablation secondarie: entropia decrescente, carica speciale, delay 0 e 12 | 4 | 4 S |
+| Baseline Sched.: PPO (Sched.) con reward terminale | 1 | 1 S |
+| Ablation secondarie: carica speciale, delay 0 e 12 | 3 | 3 S |
 | Totale | 15 (23) | 13 S (17 S) |
 
 La best response è contata come 0,5 S per run: è un'assunzione da verificare. Le estensioni facoltative (pool, penalità sul timeout) non sono nel totale e costano circa 1 S ciascuna più la best response. Con S = 5 milioni di step il totale è 65 milioni (85 milioni con 3 best response per agente); con S = 25 milioni, come nel paper, è 325 milioni (425 milioni).
