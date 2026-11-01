@@ -146,6 +146,15 @@ def main():
                    "t_gae": t_gae, "t_update": t_update,
                    "ep_len": float(np.mean([e["len"] for e in eps])) if eps else float("nan"),
                    "timeout_rate": float(np.mean([e["truncated"] for e in eps])) if eps else float("nan"),
+                   # outcomes of the games finished in this update (p1 = first slot of the game);
+                   # in self-play the mean return is ~0 by symmetry, so we log the wins per side
+                   # and the mean |raw return| (about WIN for decided games, 0 for draws)
+                   "p1_win_rate": float(np.mean([e["p1_outcome"] == 1 for e in eps])) if eps else float("nan"),
+                   "p2_win_rate": float(np.mean([e["p1_outcome"] == -1 for e in eps])) if eps else float("nan"),
+                   "decided_rate": float(np.mean([e["p1_outcome"] != 0 for e in eps])) if eps else float("nan"),
+                   "abs_return": float(np.mean([abs(e["p1_return"]) for e in eps])) if eps else float("nan"),
+                   # mean |training reward| per step (the mean itself is 0: zero-sum)
+                   "train_abs_reward": float(rew_buf.abs().mean()),
                    **stats}
             if writer is None:
                 writer = csv.DictWriter(log_file, fieldnames=list(row))
