@@ -45,7 +45,7 @@ Il simulatore Unity applica le regole del gioco; per quanto risulta dal paper no
 
 **Conseguenze sull'apprendimento.** Il segnale è sparso e ritardato: arriva solo a fine episodio, fino a 4000 passi dopo; con gamma 0,995 un'azione compiuta più di circa 920 passi prima della fine pesa meno dell'1%, quindi il credit assignment è difficile e la stima del ritorno ha varianza alta. Con il timeout a 0, contro un avversario passivo (il No-op) ogni partita non vinta è un pareggio senza segnale, e il paper osserva che le policy migliori diventano passive o reattive. La scala conta: il coefficiente di entropia (0,025) e quello della value loss (1,0) sono tarati su w = 10; con w = 1 il bonus di entropia peserebbe relativamente 10 volte di più. Un reward denso riduce la varianza ma può cambiare l'obiettivo: è il compromesso bias/varianza che il confronto vuole misurare.
 
-**Varianti confrontate.** Tutte restano a somma zero e hanno lo stesso budget (20M passi, un seed, self-play).
+**Varianti confrontate.** Tutte restano a somma zero e hanno lo stesso budget (20M passi, 5 seed, self-play).
 
 | Sigla | Reward di training | Effetto atteso | Rischio di bias | Run |
 |---|---|---|---|---|
@@ -95,7 +95,7 @@ Gli agenti condividono osservazione, azioni, rete e iperparametri di PPO e diffe
 
 **2. Estensione facoltativa: PPO con pool di checkpoint.** Ogni partita è giocata contro la policy corrente con probabilità 0,8 e contro uno snapshot del pool altrimenti. Gli snapshot (fino a 16, uno ogni circa 614.000 step) sono scelti con peso proporzionale a (1 - p\_i)^(1/2), dove p\_i è la frequenza di vittoria stimata contro lo snapshot i: si gioca di più contro chi ci batte. Con il PPO scritto da noi la scelta dell'avversario è un campionamento fatto a ogni reset dell'ambiente, senza toccare learner o moduli. Un curriculum che aggiunge avversari quando il win rate supera una soglia non è un PFSP, quindi non è la scelta fatta qui.
 
-**Scala degli esperimenti.** Il paper usa 25 milioni di step per 5 seed. Per il progetto si usa un solo seed per run, scelta dichiarata nella sezione Valutazione, e 20 milioni di step per run, perché un job su Orfeo ha un limite di 2 ore (vedi Budget di calcolo). Se serve semplificare, si riducono prima ablation e best response.
+**Scala degli esperimenti.** Il paper usa 25 milioni di step per 5 seed. Per il progetto si usano 20 milioni di step per run, perché un job su Orfeo ha un limite di 2 ore (vedi Budget di calcolo), e 5 seed (1-5) per ciascuna delle cinque varianti del confronto (R0, R1, R2, R3 e PPO Sched.), con gli stessi seed per tutte, così il confronto è appaiato. Ablation, studio su lambda e gamma e `r1_floor` restano a 1 seed. Se serve semplificare, si riducono prima ablation e best response.
 
 ## Bias e varianza nell'algoritmo
 
@@ -136,7 +136,7 @@ Ogni agente è valutato su tre livelli (contro avversari fissi, in scontro diret
 Quattro scelte di metodo da dichiarare:
 
 - **Evaluation stocastica, non greedy.** In un gioco con strategie miste una policy deterministica è sfruttabile per costruzione, quindi si valuta campionando dalla distribuzione. Il progetto Briscola usava la scelta greedy; qui non è adatto.
-- **Un solo seed per run.** Il paper ne usa 5, noi uno solo: le differenze tra metodi non sono testabili statisticamente e restano descrittive. Gli intervalli di confidenza sulle partite di valutazione misurano il rumore della valutazione, non la variabilità tra addestramenti diversi. Per mostrare che un risultato non è un caso si riportano le curve su più checkpoint della stessa run e, se resta budget, si ripete con un secondo seed il confronto più importante.
+- **5 seed per il confronto, 1 per il resto.** Come il paper, le cinque varianti del confronto (R0, R1, R2, R3, PPO Sched.) hanno 5 seed ciascuna. Gli intervalli di Wilson sulle partite misurano il rumore della valutazione; la variabilità tra addestramenti si legge dalla dispersione tra i 5 seed (media e banda min-max delle curve, win rate medio con min-max per variante). Con 5 seed i confronti restano comunque indicativi e non si fanno test di significatività. Ablation, studio lambda/gamma e `r1_floor` hanno un seed solo e sono descrittive; la best response si fa solo sul seed 1.
 - **Best response come limite inferiore.** La best response è approssimata, quindi stima per difetto la sfruttabilità reale; va detto nella relazione.
 - **Metrica comune.** Il ritorno non si può confrontare tra reward diverse: tutte le varianti si giudicano con win rate contro gli avversari fissi, scontro diretto e best response, misurati con il reward terminale (anche la best response si addestra con quello).
 
@@ -147,7 +147,7 @@ Il paper usa PPO in self-play con gli stessi iperparametri del nostro progetto, 
 | Aspetto | Paper | Questo progetto |
 | --- | --- | --- |
 | Algoritmi | PPO (entropia fissa 0,025), PPO (Sched.) (entropia da 0,1 a 0), EMAgnet, PFSP | PPO scritto da noi, con entropia fissa e Sched. come nel paper (reward terminale); PFSP come estensione facoltativa; niente EMAgnet |
-| Step e seed | 25 milioni di step, 5 seed | 20 milioni di step (limite di 2 ore per job su Orfeo), 1 seed |
+| Step e seed | 25 milioni di step, 5 seed | 20 milioni di step (limite di 2 ore per job su Orfeo), 5 seed per le varianti del confronto, 1 per il resto |
 | Reward | terminale ±10, timeout 0 | R0 identico al paper; R1 guard break, R2 shaping a potenziale, R3 vittoria scalata nel tempo |
 | Avversari fissi | random e no-op | random, no-op, back e FootsiesBot |
 | Scontro diretto | tutte le coppie di algoritmi, 96 partite per coppia di seed | final di ogni run, 200 partite; matrice con più checkpoint da fare |
@@ -169,22 +169,22 @@ Il nucleo sono tre confronti: le due baseline del paper, le funzioni di reward e
 | Facoltativa | Pool di checkpoint | self-play contro snapshot passati con campionamento prioritario | Il pool riduce la sfruttabilità? |
 | Facoltativa | Penalità sul timeout | penalità simmetrica, fuori dalla somma zero | Scoraggia la passività, e cosa perde la valutazione? |
 
-Tutte le run usano un solo seed, quindi i risultati sono descrittivi. Tutte le run usano la stessa rete di base, così che le differenze si attribuiscano alla variabile cambiata.
+Le varianti del confronto usano 5 seed, le altre run un seed solo e sono descrittive. Tutte le run usano la stessa rete di base, così che le differenze si attribuiscano alla variabile cambiata.
 
 ## Budget di calcolo
 
-Con un solo seed le run sono 15 (23 con 3 best response per agente), ma ogni run è di 20 milioni di step, scelti in base alla velocità misurata e al limite di 2 ore per job su Orfeo. Unità di costo: S = una run PPO da 20 milioni di step.
+Con 5 seed per le cinque varianti del confronto le run sono 35 (43 con 3 best response per agente), ma ogni run è di 20 milioni di step, scelti in base alla velocità misurata e al limite di 2 ore per job su Orfeo. Unità di costo: S = una run PPO da 20 milioni di step.
 
 | Gruppo di run | N. run | Costo |
 | --- | --- | --- |
-| Confronto reward: 4 funzioni di reward con PPO, 1 seed ciascuna | 4 | 4 S |
+| Confronto reward: R0, R1, R2, R3 con PPO, 5 seed ciascuna (3 già fatte) | 20 | 20 S |
 | Best response: 1 per agente finale (3 per agente) | 4 (12) | 2 S (6 S) |
 | Bias e varianza: lambda 0 e 1, gamma 0,99 | 3 | 3 S |
-| Baseline Sched.: PPO (Sched.) con reward terminale | 1 | 1 S |
+| Baseline Sched.: PPO (Sched.) con reward terminale, 5 seed | 5 | 5 S |
 | Ablation secondarie: carica speciale, delay 0 e 12 | 3 | 3 S |
-| Totale | 15 (23) | 13 S (17 S) |
+| Totale | 35 (43) | 33 S (37 S) |
 
-La best response è contata come 0,5 S per run: è un'assunzione da verificare. Le estensioni facoltative (pool, penalità sul timeout) non sono nel totale e costano circa 1 S ciascuna più la best response. Con S = 20 milioni di step il totale è 260 milioni (340 milioni con 3 best response per agente).
+La best response è contata come 0,5 S per run: è un'assunzione da verificare. Le estensioni facoltative (pool, penalità sul timeout) non sono nel totale e costano circa 1 S ciascuna più la best response. Con S = 20 milioni di step il totale è 660 milioni (740 milioni con 3 best response per agente). Le run nuove da lanciare per il confronto sono 22 (`slurm/seeds_array.sbatch`, al più 8 job in parallelo): con 8 job alla volta servono 3 turni di circa 1,5 ore.
 
 Le velocità del paper (circa 19.000 step/s con un processo, circa 52.500 con 4 processi) misurano solo il simulatore, non l'addestramento della rete. Misurate sul nostro PPO completo (48 partite, 3.072 step per update): circa 6.700 step/s sul Mac e circa 4.050 su un nodo THIN di Orfeo con 4 thread. Quattro job contemporanei su THIN fanno 3.800-4.500 step/s ciascuno, senza rallentamenti. Il tempo si divide tra aggiornamento della rete (56% sul Mac, 63% su Orfeo) e simulatore (37% e 25%). Una run da 20 milioni di step dura quindi circa 50 minuti sul Mac e 1,4 ore su THIN (1,8 su GENOA); sulle run reali su THIN abbiamo misurato 85-100 minuti. GENOA fa circa 3.100 step/s, stabili su 3 job, ed è la seconda scelta; EPYC è la più lenta (circa 750 step/s, misurata con una versione precedente del codice) e non si usa. Il piano gira su Orfeo con un job per run, in parallelo: il tempo reale è circa quello di una run più la coda, non la somma. Se non ci sta, si taglia in quest'ordine: ablation facoltative, best response a 1 seed, step per run.
 
@@ -268,8 +268,8 @@ Il lavoro procede in sei fasi; le date dipendono dalla scadenza dell'esame, che 
 | Il PPO scritto da noi ha un bug o impara peggio del previsto | Si controllano le curve contro il Random, loss, KL e frazione di campioni tagliati dal clipping (e si confronta con i valori del paper) |
 | Tempo di calcolo insufficiente | Meno step e meno ablation; ambienti vettorizzati e, se serve, più processi |
 | Le mosse speciali non vengono scoperte | Si attivano le azioni di carica come ablation |
-| Le varianti di reward non producono differenze visibili | Si riporta come risultato e se ne discutono le cause (bias e varianza, un solo seed); se resta budget si ripete il confronto con un secondo seed |
+| Le varianti di reward non producono differenze visibili | Si riporta come risultato e se ne discutono le cause (bias e varianza, dispersione tra i 5 seed) |
 | L'agente diventa passivo | Si misura contro il no-op e lo si discute come limite |
 | Exploitability rumorosa | Più seed per le best response e intervalli di confidenza |
 
-Limiti dichiarati fin d'ora: con un solo seed per run i risultati non separano l'effetto del metodo dalla variabilità tra addestramenti, quindi sono descrittivi; la best response approssima per difetto la sfruttabilità; la policy usa solo l'osservazione corrente (senza rete ricorrente né belief esplicito), quindi la parziale osservabilità è trattata in modo limitato; Footsies isola la sola fase neutrale, molto più semplice di un gioco di combattimento commerciale.a libe
+Limiti dichiarati fin d'ora: con 5 seed per il confronto (1 per le altre run) i risultati restano indicativi e le ablation non separano l'effetto del metodo dalla variabilità tra addestramenti, quindi sono descrittivi; la best response approssima per difetto la sfruttabilità; la policy usa solo l'osservazione corrente (senza rete ricorrente né belief esplicito), quindi la parziale osservabilità è trattata in modo limitato; Footsies isola la sola fase neutrale, molto più semplice di un gioco di combattimento commerciale.
