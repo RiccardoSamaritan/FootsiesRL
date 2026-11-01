@@ -5,8 +5,10 @@
 #   tasks  0-3   r0 seeds 2-5      tasks 12-16  r3 seeds 1-5
 #   tasks  4-7   r1 seeds 2-5      tasks 17-21  r0_sched (entropy 0.1 -> 0) seeds 1-5
 #   tasks  8-11  r2 seeds 2-5
-# At most 8 tasks at the same time (change it with --array=0-21%N):
-#   sbatch slurm/seeds_array.sbatch
+# Orfeo limits on THIN: at most 20 submitted jobs (queued + running) and 5 running at
+# once, so the 22 tasks go in two submissions (5 waves of ~1.5 h in total):
+#   sbatch slurm/seeds_array.sbatch                       # tasks 0-19, 5 at a time
+#   sbatch --array=20-21 slurm/seeds_array.sbatch         # when some of them are done
 # Rerun some tasks only:  sbatch --array=3,7 slurm/seeds_array.sbatch
 #SBATCH --job-name=seeds
 #SBATCH --partition=THIN
@@ -15,7 +17,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --time=02:00:00             # Orfeo limit per job is 2 h; 20M steps take ~1.4 h on THIN
-#SBATCH --array=0-21%8
+#SBATCH --array=0-19%5
 #SBATCH --output=slurm/logs/%x_%A_%a.out
 set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
