@@ -167,9 +167,11 @@ def ppo_update(agent, optimizer, batch, cfg: PPOConfig, ent_coef: float):
     return out
 
 
-def save_agent(path, agent, cfg: PPOConfig, obs_dim, n_actions, steps):
+def save_agent(path, agent, cfg: PPOConfig, obs_dim, n_actions, steps, env_config=None):
+    """env_config: game settings of the training env (action_delay, use_special_charge_action),
+    so that evaluation can build the same env. Older checkpoints have none (default settings)."""
     torch.save({"agent": agent.state_dict(), "cfg": asdict(cfg), "obs_dim": obs_dim,
-                "n_actions": n_actions, "steps": steps}, path)
+                "n_actions": n_actions, "steps": steps, "env_config": dict(env_config or {})}, path)
 
 
 def load_agent(path, device="cpu"):

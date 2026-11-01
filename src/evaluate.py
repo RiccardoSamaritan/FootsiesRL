@@ -99,6 +99,15 @@ def _opponent_label(spec: str) -> str:
     return f"{p.parent.name}/{p.stem}" if p.suffix == ".pt" else spec
 
 
+def _game_config(player):
+    """Game settings a checkpoint was trained with (defaults filled in); None for fixed opponents."""
+    cfg = getattr(player, "env_config", None)
+    if cfg is None:
+        return None
+    return {"action_delay": cfg.get("action_delay", TRAIN_ENV_CONFIG["action_delay"]),
+            "use_special_charge_action": cfg.get("use_special_charge_action", False)}
+
+
 def _batchable(player) -> bool:
     """Players that can decide for many games at once (no per-game state, no infos)."""
     return isinstance(player, (PolicyOpponent, RandomOpponent, ConstantActionOpponent))
@@ -160,18 +169,23 @@ def evaluate(agent: Opponent, opponent_names: list[str], games: int,
     n_par = max(2, min(parallel, games) // 2 * 2)  # even, >= 2
     venv = single = None
     rows = []
+    players = [make_player(n, seed=seed, frame_skip=ENV_CONFIG["frame_skip"]) for n in opponent_names]
+    # the env uses the game settings the checkpoints were trained with (action delay, charge actions)
+    cfgs = [c for c in map(_game_config, [agent, *players]) if c is not None]
+    game_cfg = cfgs[0] if cfgs else {}
+    if any(c != game_cfg for c in cfgs):
+        raise ValueError(f"agents trained with different game settings cannot play each other: {cfgs}")
     try:
-        for name in opponent_names:
-            opponent = make_player(name, seed=seed, frame_skip=ENV_CONFIG["frame_skip"])
+        for name, opponent in zip(opponent_names, players):
             if _batchable(agent) and _batchable(opponent):
                 if venv is None:
                     port = portpicker.pick_unused_port()
-                    venv = FootsiesVecEnv(n_par, port=port, platform=PLATFORM)
+                    venv = FootsiesVecEnv(n_par, port=port, platform=PLATFORM, env_config=game_cfg)
                 outcomes = play_games_vec(venv, agent, opponent, games)
             else:
                 if single is None:
                     port = portpicker.pick_unused_port()
-                    single = footsiesgym.make(config={**ENV_CONFIG, "port": port},
+                    single = footsiesgym.make(config={**ENV_CONFIG, **game_cfg, "port": port},
                                               platform=PLATFORM)
                     wait_for_server(port)
                 outcomes = [play_game(single, agent, opponent, "p1" if i % 2 == 0 else "p2")

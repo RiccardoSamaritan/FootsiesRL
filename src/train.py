@@ -19,7 +19,7 @@ from dataclasses import asdict
 import numpy as np
 import torch
 
-from env import FootsiesVecEnv
+from env import ENV_CONFIG, FootsiesVecEnv
 from rewards import REWARDS, make_reward
 from ppo import Agent, PPOConfig, compute_gae, ppo_update, save_agent
 
@@ -41,6 +41,10 @@ def parse_args():
     p.add_argument("--ent-coef", type=float, default=None, help="default 0.025 (fixed) or 0.1 (start value with --ent-decay)")
     p.add_argument("--adv-std-floor", type=float, default=0.0,
                    help="lower bound for the std used to normalize advantages (0 = off)")
+    p.add_argument("--special-charge", action="store_true",
+                   help="game option use_special_charge_action: 9 actions, 88-dim observation")
+    p.add_argument("--action-delay", type=int, default=None,
+                   help=f"game option action_delay (default {ENV_CONFIG['action_delay']})")
     p.add_argument("--ent-decay", action="store_true", help="decay the entropy coefficient linearly to 0")
     p.add_argument("--checkpoint-every", type=int, default=1_000_000, help="steps")
     p.add_argument("--overwrite", action="store_true", help="reuse an existing run directory")
@@ -60,16 +64,19 @@ def main():
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     device = torch.device(args.device)
+    # game settings: stored in the checkpoints so that evaluation plays with the same rules
+    game_cfg = {"action_delay": ENV_CONFIG["action_delay"] if args.action_delay is None else args.action_delay,
+                "use_special_charge_action": args.special_charge}
 
     ent = args.ent_coef if args.ent_coef is not None else (0.1 if args.ent_decay else 0.025)
     cfg = PPOConfig(gamma=args.gamma, gae_lambda=args.gae_lambda, lr=args.lr,
                     ent_coef=ent, ent_decay=args.ent_decay,
                     adv_std_floor=args.adv_std_floor)
     with open(os.path.join(run_dir, "config.json"), "w") as f:
-        json.dump({"args": vars(args), "ppo": asdict(cfg)}, f, indent=2)
+        json.dump({"args": vars(args), "ppo": asdict(cfg), "game": game_cfg}, f, indent=2)
 
     reward_fn, env_overrides = make_reward(args.reward, gamma=args.gamma)
-    env = FootsiesVecEnv(args.num_envs, port=args.port, env_config=env_overrides, reward_fn=reward_fn)
+    env = FootsiesVecEnv(args.num_envs, port=args.port, env_config={**env_overrides, **game_cfg}, reward_fn=reward_fn)
     S, T = env.num_slots, args.rollout
     agent = Agent(env.obs_dim, env.n_actions, cfg.hidden).to(device)
     optimizer = torch.optim.Adam(agent.parameters(), lr=cfg.lr, eps=1e-5)
@@ -172,9 +179,9 @@ def main():
                       f"gae {t_gae:.2f}s sgd {t_update:.2f}s", flush=True)
 
             if steps >= next_ckpt:
-                save_agent(os.path.join(run_dir, f"ckpt_{steps}.pt"), agent, cfg, env.obs_dim, env.n_actions, steps)
+                save_agent(os.path.join(run_dir, f"ckpt_{steps}.pt"), agent, cfg, env.obs_dim, env.n_actions, steps, game_cfg)
                 next_ckpt += args.checkpoint_every
-        save_agent(os.path.join(run_dir, "final.pt"), agent, cfg, env.obs_dim, env.n_actions, steps)
+        save_agent(os.path.join(run_dir, "final.pt"), agent, cfg, env.obs_dim, env.n_actions, steps, game_cfg)
     finally:
         log_file.close()
         env.close()

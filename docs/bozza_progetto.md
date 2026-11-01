@@ -163,9 +163,9 @@ Il nucleo sono tre confronti: le due baseline del paper, le funzioni di reward e
 | --- | --- | --- | --- |
 | Core | Baseline del paper | PPO con entropia fissa (0,025) contro PPO (Sched.) (0,1 a 0), entrambe con reward terminale | La schedule di entropia cambia lo stallo e la robustezza, come nel paper? |
 | Core | Reward | terminale; denso sulla guardia con budget; shaping a potenziale; vittoria scalata sul tempo | Quale reward produce l'agente più forte e meno sfruttabile? |
-| Core | Bias e varianza | GAE lambda 0 e 1 contro 0,95; gamma 0,99 contro 0,995 | Come cambiano velocità e stabilità con più bias (TD) o più varianza (Monte Carlo)? |
-| Secondaria | Azione di carica | `use_special_charge_action` on/off | L'agente scopre e usa le mosse speciali? |
-| Secondaria | Ritardo d'azione | `action_delay` 0, 8, 12 | Con delay 0 il gioco diventa reattivo e fragile, come nel paper? |
+| Core | Bias e varianza | su R0, 1 seed: GAE lambda 0 e 1 contro 0,95; gamma 0,99 contro 0,995 | Come cambiano velocità e stabilità con più bias (TD) o più varianza (Monte Carlo)? |
+| Secondaria | Azione di carica | su R0, 1 seed: `use_special_charge_action` on/off (9 azioni, osservazione da 88) | L'agente scopre e usa le mosse speciali? |
+| Secondaria | Ritardo d'azione | su R0, 1 seed: `action_delay` 0, 8, 12 | Con delay 0 il gioco diventa reattivo e fragile, come nel paper? |
 | Facoltativa | Pool di checkpoint | self-play contro snapshot passati con campionamento prioritario | Il pool riduce la sfruttabilità? |
 | Facoltativa | Penalità sul timeout | penalità simmetrica, fuori dalla somma zero | Scoraggia la passività, e cosa perde la valutazione? |
 

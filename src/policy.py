@@ -21,8 +21,9 @@ class PolicyOpponent:
     """
 
     def __init__(self, agent, obs_dim: int, n_actions: int,
-                 device: str = "cpu", name: str = "policy"):
+                 device: str = "cpu", name: str = "policy", env_config: dict | None = None):
         self.agent = agent.to(device).eval()
+        self.env_config = dict(env_config or {})  # game settings it was trained with
         self.obs_dim = obs_dim
         self.n_actions = n_actions
         self.device = device
@@ -60,6 +61,6 @@ def load_policy_opponent(path: str, device: str = "cpu") -> PolicyOpponent:
     """Build a PolicyOpponent from a checkpoint saved by ppo.save_agent."""
     agent, ck = load_agent(path, device=device)
     opponent = PolicyOpponent(agent, ck["obs_dim"], ck["n_actions"], device=device,
-                              name=os.path.basename(path))
+                              name=os.path.basename(path), env_config=ck.get("env_config", {}))
     opponent.steps = int(ck["steps"])  # training steps at the time of the checkpoint
     return opponent
