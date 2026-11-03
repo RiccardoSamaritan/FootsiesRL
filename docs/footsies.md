@@ -69,7 +69,7 @@ At each step each player chooses one of **6 discrete actions**:
 
 Actions are **player-relative** (forward/back relative to where the player is facing). `game_action_to_env_action` in `src/opponents.py` converts the game's absolute actions into these using the player's side, and this is what allows the **same network** to play both as P1 and as P2.
 
-Dash and specials have no dedicated action: they emerge from **sequences** of actions. `B_SPECIAL` requires **15 consecutive steps** with an attack action (60 frames with `frame_skip` 4) followed by release on `FORWARD` or `BACK`. Under a uniform policy this sequence occurs with probability of about **0.001%**, and on top of that it only works if the opponent is vulnerable. This is why the library offers `use_special_charge_action`, which brings the actions to **9** by adding `BACK-CHARGE`, `NEUTRAL-CHARGE` and `FORWARD-CHARGE`. The first press starts the charge; the second releases it and performs the corresponding special.
+Dash and specials have no dedicated action: they emerge from **sequences** of actions. `B_SPECIAL` requires **15 consecutive steps** with an attack action (60 frames with `frame_skip` 4) followed by release on `FORWARD` or `BACK`. Under a uniform policy this sequence occurs with probability of about **0.001%**, and on top of that it only works if the opponent is vulnerable. This is why the library offers `use_special_charge_action`, which brings the actions to **9** by adding `BACK-CHARGE`, `NEUTRAL-CHARGE` and `FORWARD-CHARGE`. The first press starts the charge; the second releases it and performs the corresponding special. In training it is enabled with `--special-charge` (observation of 88 dimensions, §3.2); it is off by default and used only as an ablation (§7).
 
 ### 2.4 Time: `frame_skip` and `action_delay`
 
@@ -90,7 +90,7 @@ The paper measures reactability as follows: after the delay, a stimulus can fall
 | `N_SPECIAL` | sometimes (8 <= 11 < 12) | always (29) |
 | `B_SPECIAL` | never (2 < 8) | always (47) |
 
-With the default configuration, therefore, **attacks must be predicted, but mistakes can always be punished on reaction**; both specials have recoveries so long that they are punishable at any reasonable delay. This leads to a hypothesis of ours, not yet verified, for the observed passivity (§7): whiffing an attack is costly, waiting is not.
+With the default configuration, therefore, **attacks must be predicted, but mistakes can always be punished on reaction**; both specials have recoveries so long that they are punishable at any reasonable delay. This leads to a hypothesis of ours, not yet verified, for the observed passivity (§8): whiffing an attack is costly, waiting is not.
 
 ### 2.5 How a match ends
 
@@ -116,6 +116,8 @@ The configuration is shared between training and evaluation:
 | `headless` | True | no graphics |
 
 The reward scale is not a detail: the paper's entropy coefficient (0.025) and value loss coefficient (1.0) are tuned for $w=10$; with $w=1$ the entropy bonus would weigh relatively 10 times more.
+
+**Game settings of a run.** Two options can be changed from the command line for the ablations: `--action-delay` (default 8) and `--special-charge` (default off). They are saved in `config.json` (key `"game"`) and in every checkpoint (`env_config`), so that `evaluate.py` and `head_to_head.py` rebuild the environment with the **same rules** used in training. Agents trained with different settings cannot play each other: the evaluation stops with an error. Older checkpoints have no `env_config` and use the default settings.
 
 ### 3.2 Observation
 
@@ -333,6 +335,7 @@ and it equals $-10\,\gamma^{\,T-t-1}$ in a loss and $0$ in a draw. Two problems 
 
 - **Dense reward.** Every time a player's guard drops by one point, the attacker receives $+x = +2$ and the blocker $-2$. The sum stays zero.
 - **Budget.** The shaping received is **subtracted from the win reward**: the guard has 3 points, so at most $3x = 6$ can be collected before the end, and the constraint $3x < w$ guarantees that the final reward stays positive. The total (undiscounted) return of a win remains $w = 10$.
+- **`r1_floor`.** It is not a new reward: it is R1 trained with `--adv-std-floor`, a fix for the stalls described in §5.4.
 
 #### R2 — potential-based shaping
 
@@ -498,7 +501,7 @@ With $\lambda = 0$ the first steps "see" the win only through the critic; with $
 
 **The project's numbers.** With $\gamma = 0.995$ and $\lambda = 0.95$, $\gamma\lambda \approx 0.945$: GAE effectively looks about 18 steps ahead (about 73 frames, just over one second of play). The rollout is 64 steps long and beyond that $V$ of the last observation is used; the lost weight is about $0.03$, so the cut matters little. The important consequence is that a win up to 4000 steps away reaches the early actions **only through the critic**: GAE reduces variance, but long-term credit assignment depends on how well $V$ has learned.
 
-**In the code** the computation runs backwards over the rollout, handling episode ends as in §4.3 [R src/ppo.py `compute_gae`]:
+**In the code** the computation runs backwards over the rollout, handling episode ends as in §4.3 (`compute_gae` in `src/ppo.py`):
 
 $$
 \hat V_{t+1} =
@@ -569,6 +572,10 @@ $$
 
 The coefficient values are in §5.5.
 
+**Advantage normalization and stalls.** In each minibatch the advantages are normalized, $\hat A \leftarrow (\hat A - \text{mean}) / \text{std}$, so that the size of the update does not depend on the reward scale. This has a side effect when both agents become **passive**: the reward is almost always 0, the advantages are tiny (std ~$10^{-3}$) and dividing by their std blows **noise** up to scale 1. Meanwhile the entropy bonus pushes the policy towards uniform, and the learning rate going to 0 prevents escaping the last stall.
+
+The fix (`--adv-std-floor`) divides by $\max(\text{std}, \text{floor})$ instead: small advantages stay small. With floor = 0 (default) nothing changes, so the baselines are untouched. In the `r1_floor_s1` run the stalled matches drop from 30% to 4% (one seed, descriptive). Limit: it removes the noise amplification, not the passivity against the fixed opponents (§8).
+
 ### 5.5 Network and hyperparameters
 
 Two **separate** MLPs (no shared features), 2×256 ReLU (the same architecture used for all algorithms in the paper), orthogonal initialization (gain $\sqrt2$, 0.01 on the policy output, 1.0 on the value output), Adam with $\varepsilon = 10^{-5}$. Hyperparameters from Table 3 of the paper:
@@ -579,12 +586,14 @@ Two **separate** MLPs (no shared features), 2×256 ReLU (the same architecture u
 | GAE $\lambda$ | 0.95 |
 | clip $\epsilon$ | 0.3 |
 | value loss coeff. | 1.0 |
-| entropy coeff. | 0.025 (fixed) |
+| entropy coeff. | 0.025 (fixed); 0.1 -> 0 linearly in PPO (Sched.) |
 | epochs × minibatches | 8 × 8 |
 | learning rate | $10^{-4}$, linearly decaying to 0 |
 | max gradient norm | 0.5 |
 | parallel matches × rollout | 48 × 64 |
 | value clipping | off (returns on a ±10 scale) |
+
+As in the paper there are **two PPO baselines**, both with the terminal reward R0: PPO with fixed entropy (0.025) and **PPO (Sched.)**, where the coefficient decays linearly from 0.1 to 0 (`--ent-decay`). The reward variants R1–R3 all use fixed entropy, so the reward is the only thing that changes.
 
 ### 5.6 The training loop
 
@@ -593,10 +602,18 @@ For each update:
 1. **rollout**: 64 steps over 48 matches -> $48 \times 64 = 3072$ game steps, i.e. **6144 samples** (two players per match), all generated by the same network;
 2. **GAE** over the whole rollout, bootstrapping on the value of the last observation;
 3. **PPO**: 8 epochs × 8 minibatches of 768 samples;
-4. **logging**;
+4. **logging** of one row per update in `runs/<run>/log.csv` (see below);
 5. **checkpoint** every 1M steps.
 
-The comparison runs have **20M steps** (6510 updates, last checkpoint at 19,998,720 steps) and **1 seed**, due to the 2-hour per-job limit on the Orfeo cluster [R slurm/rewards_array.sbatch, docs/bozza_progetto.md]. Speeds measured on the full PPO: ~6700 steps/s on the Mac, ~4050 on an Orfeo THIN node with 4 threads; time is split between network updates (56–63%) and the simulator (25–37%).
+**What is logged.** Besides times, learning rate and entropy coefficient:
+
+- **episodes**: mean length `ep_len` and share of timeouts `timeout_rate`;
+- **self-play outcomes**: in self-play the mean return is ~0 by symmetry, so it says nothing. We log instead the wins per side (`p1_win_rate`, `p2_win_rate`), the share of decided matches `decided_rate` (1 − draws), the mean $\lvert$raw return$\rvert$ `abs_return` (about 10 for decided matches, 0 for draws) and the mean $\lvert$training reward$\rvert$ per step `train_abs_reward`;
+- **bias/variance diagnostics**: explained variance of the critic `explained_var` (how much of the return $V$ explains: low means a biased critic), std of the advantages `adv_std` and of the returns `return_std` (variance), `approx_kl` (how far an update moved the policy).
+
+**Budget and seeds.** Every run has **20M steps** (6510 updates, last checkpoint at 19,998,720 steps), because of the 2-hour per-job limit on the Orfeo cluster. The five variants of the comparison (R0, R1, R2, R3, R0 Sched.) have **5 seeds** each (1–5, the same for all, so the comparison is paired); ablations and `r1_floor` have **1 seed** and are descriptive. The missing seeds are in `slurm/seeds_array.sbatch` (22 runs). Orfeo allows at most 20 jobs in the queue and 5 running, so they go in 5 waves of about 1.5 h.
+
+Speeds measured on the full PPO: ~6700 steps/s on the Mac, ~4050 on an Orfeo THIN node with 4 threads; time is split between network updates (56–63%) and the simulator (25–37%). Real 20M-step runs on THIN took 85–100 minutes.
 
 ---
 ## 6. Evaluation
@@ -615,8 +632,67 @@ $$
 
 Draws count as non-wins, so their number is always reported as well.
 
+### 6.1 Head-to-head
+
+`src/head_to_head.py` makes checkpoints play each other: each pair plays $n$ matches, half per side, both sampling from their policy. The **score** of A against B is
+
+$$
+\text{score}_{A} = \frac{W + 0.5\,D}{n},
+$$
+
+so 0.5 means even and a draw (timeout, both passive) counts half. The output is a matrix (score of the row agent against the column agent) and, when several seeds of the same variant are present, the matrix averaged per variant: there the diagonal compares different seeds of the same variant, i.e. the spread between training runs. A ranking (mean score against all the others) is also printed, but self-play is **not transitive** (A can beat B, B beat C and C beat A), so the matrix is what matters.
+
+### 6.2 Several seeds
+
+`src/plot_results.py` groups runs by variant (the name without `_s<seed>`). A variant with several seeds is drawn as the **mean over seeds with a min–max band**; a single run is drawn as it is, with its Wilson interval. `results/summary_final.csv` has, for each variant and opponent, the mean win rate of the final checkpoints and its min–max over seeds.
+
+The two kinds of uncertainty are different: the **Wilson interval** measures the noise of the evaluation (how many matches were played), the **band between seeds** measures how much the result changes from one training run to another. With 5 seeds the comparisons remain indicative and no significance tests are made.
+
 ---
 
-## 7. Results so far
+## 7. Experiments
+
+There are 3 comparisons: the 2 paper baselines, the reward functions and the bias–variance trade-off; the environment ablations and the extensions come after, if there is compute left.
+
+| Priority | Experiment | What changes | Runs | Question |
+|---|---|---|---|---|
+| Core | Paper baselines | fixed entropy (0.025) vs Sched. (0.1 -> 0), both on R0 | `r0`, `r0_sched`, 5 seeds | Does the entropy schedule change stalls and robustness, as in the paper? |
+| Core | Reward | R0, R1, R2, R3 (§4.5) | 5 seeds each | Which reward gives the strongest and least exploitable agent? |
+| Core | Bias and variance | GAE $\lambda$ 0 and 1 vs 0.95; $\gamma$ 0.99 vs 0.995, on R0 | 1 seed each | How do speed and stability change with more bias (TD) or more variance (Monte Carlo)? |
+| Secondary | Charge actions | `use_special_charge_action` on (9 actions, 88-dim observation), on R0 | 1 seed | Does the agent discover and use the specials? |
+| Secondary | Action delay | `action_delay` 0 and 12 vs 8, on R0 | 1 seed each | With delay 0 does the game become reactive and brittle, as in the paper? |
+| Optional | Checkpoint pool (PFSP) | self-play against past snapshots | — | Does the pool reduce exploitability? |
+| Optional | Timeout penalty | symmetric penalty, outside zero-sum | — | Does it discourage passivity, and what does the evaluation lose? |
+
+The bias–variance runs and the two game ablations are all in `slurm/ablations_array.sbatch` (6 runs: `r0_lam1_s1`, `r0_lam0_s1`, `r0_gamma099_s1`, `r0_charge_s1`, `r0_delay0_s1`, `r0_delay12_s1`); the reference is `r0_s1`. All runs use the same network, so differences can be attributed to the variable that changed.
 
 ---
+
+## 8. Results so far
+
+These are **one run per variant** (seed 1), so they are descriptive, not statistical. R3, PPO (Sched.), the other seeds and the ablations have not been run yet.
+
+**Against the fixed opponents** (final checkpoints, `results/summary_final.csv`):
+
+| Variant | vs random | vs FootsiesBot | vs noop / back |
+|---|---|---|---|
+| R0 | 88% | 66% | 0 wins, 100% draws |
+| R1 | 90% | 76% | 0 wins, 100% draws |
+| R1_floor | 91% | 84% | 0 wins, 100% draws |
+| R2 | 18% | 5% | 0 wins, 100% draws |
+
+- **Reactivity.** No agent ever wins against an opponent that stands still or runs away: every match is a timeout. The paper observes the same thing: the best policies become reactive and do not start the fight. It does not mean the agents cannot play: against FootsiesBot, which attacks, R0 and R1 win most matches. This matches the hypothesis of §2.4 (whiffing an attack is costly, waiting is not), still to be verified.
+- **R2 is the worst**, and the only variant that also loses against random. Why is still a hypothesis (in theory the shaping should not change the optimal policy; in practice truncation and the approximation $\Phi(s') \approx \Phi(s)$ can break it, §4.5).
+- **R1_floor** is the best against FootsiesBot; the fix of §5.4 reduces the stalls in self-play.
+
+**Head-to-head** (smoke test, 50 matches per pair, `results/h2h_smoke.csv`):
+
+| A vs B | Score of A | W / D / L |
+|---|---|---|
+| R0 vs R1 | 0.59 | 11 / 37 / 2 |
+| R0 vs R2 | 0.58 | 8 / 42 / 0 |
+| R0 vs R1_floor | 0.42 | 21 / 0 / 29 |
+| R1 vs R2 | 0.50 | 0 / 50 / 0 |
+| R1 vs R1_floor | 0.53 | 13 / 27 / 10 |
+
+With 50 matches the intervals are wide (about ±0.13), so these numbers only show the trend. The most visible effect is the **draws**: when both agents are reactive (e.g. R1 vs R2) they all end in a timeout, while R1_floor, which is less passive, decides every match against R0. The draws against the fixed opponents are therefore partly a property of the game and of self-play, not only of the reward: the comparison has to keep the two effects apart.
