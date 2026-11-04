@@ -38,6 +38,8 @@ import matplotlib.pyplot as plt  # noqa: E402
 ROOT = Path(__file__).resolve().parent.parent
 SLOTS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"]
 REWARD_SLOT = {"r0": 0, "r1": 1, "r2": 2, "r3": 3}
+# fixed colors of the variants that are not a plain reward, so they never look like another variant
+VARIANT_COLOR = {"r0_sched": "#e87ba4", "r1_floor": "#6250d6"}
 SURFACE, INK, MUTED, GRID = "#fcfcfb", "#0b0b0b", "#52514e", "#e6e5e1"
 FIXED_OPPONENTS = ["random", "footsies_bot", "noop", "back"]
 OPPONENT_TITLES = {"random": "vs random", "footsies_bot": "vs FootsiesBot",
@@ -71,7 +73,10 @@ def series_colors(series):
     colors, spare = {}, iter(SLOTS[4:])
     for s in series:
         key = variant_of(s["key"])
-        colors[s["key"]] = SLOTS[REWARD_SLOT[key]] if key in REWARD_SLOT else next(spare, MUTED)
+        if key in REWARD_SLOT:
+            colors[s["key"]] = SLOTS[REWARD_SLOT[key]]
+        else:
+            colors[s["key"]] = VARIANT_COLOR.get(variant_of(s["key"]), next(spare, MUTED))
     return colors
 
 
@@ -135,7 +140,7 @@ def draw_series(ax, curves, color, label):
         with warnings.catch_warnings():  # all-nan columns (no finished game) give a warning
             warnings.simplefilter("ignore", RuntimeWarning)
             mean, lo, hi = np.nanmean(ys, axis=0), np.nanmin(ys, axis=0), np.nanmax(ys, axis=0)
-        ax.fill_between(x, lo, hi, color=color, alpha=0.18, linewidth=0)
+        ax.fill_between(x, lo, hi, color=color, alpha=0.10, linewidth=0)
     else:
         mean = ys[0]
     ax.plot(x, mean, color=color, linewidth=2, label=label)
@@ -157,10 +162,10 @@ def plot_panels(series, logs, colors, panels, out, smooth, shape, title):
         ax.set_xlabel("training steps (millions)", color=MUTED, fontsize=9)
     if len(series) > 1:
         handles, labels = axes.flat[0].get_legend_handles_labels()
-        fig.legend(handles, labels, loc="upper right", ncol=len(series), frameon=False,
+        fig.legend(handles, labels, loc="lower center", ncol=len(series), frameon=False,
                    fontsize=10, labelcolor=INK)
-    fig.suptitle(title, x=0.01, ha="left", fontsize=12, color=INK)
-    fig.tight_layout(rect=(0, 0, 1, 0.95))
+    fig.suptitle(title, x=0.01, ha="left", fontsize=11.5, color=INK)
+    fig.tight_layout(rect=(0, 0.05, 1, 0.95))
     fig.savefig(out, dpi=160, facecolor=SURFACE)
     plt.close(fig)
 
@@ -252,7 +257,7 @@ def plot_eval(rows, series, colors, out):
                 mean = np.array([v.mean() for v in vals])
                 if multi:  # several seeds: mean line, min-max band and one dot per seed
                     ax.fill_between(x, [v.min() for v in vals], [v.max() for v in vals],
-                                    color=color, alpha=0.18, linewidth=0)
+                                    color=color, alpha=0.10, linewidth=0)
                     ax.plot(x, mean, color=color, linewidth=2, marker="o", markersize=5, label=s["label"])
                     for xi, v in zip(x, vals):
                         ax.scatter([xi] * len(v), v, color=color, s=8, alpha=0.5, zorder=3)
@@ -273,11 +278,12 @@ def plot_eval(rows, series, colors, out):
         axes[1, j].set_xlabel("checkpoint (millions of steps)", color=MUTED, fontsize=9)
     if len(series) > 1:
         handles, labels = axes[0, 0].get_legend_handles_labels()
-        fig.legend(handles, labels, loc="upper right", ncol=len(series), frameon=False,
+        fig.legend(handles, labels, loc="lower center", ncol=len(series), frameon=False,
                    fontsize=10, labelcolor=INK)
-    fig.suptitle("Checkpoints against fixed opponents (several seeds: mean, band min-max, dots = seeds; "
-                 "one run: 95% CI)", x=0.01, ha="left", fontsize=11.5, color=INK)
-    fig.tight_layout(rect=(0, 0, 1, 0.95))
+    fig.suptitle("Checkpoints against fixed opponents", x=0.01, ha="left", fontsize=12.5, color=INK)
+    fig.text(0.01, 0.945, "several seeds: mean line, min-max band, dots = seeds; one run: 95% CI",
+             ha="left", fontsize=9, color=MUTED)
+    fig.tight_layout(rect=(0, 0.05, 1, 0.94))
     fig.savefig(out, dpi=160, facecolor=SURFACE)
     plt.close(fig)
 

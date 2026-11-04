@@ -1,0 +1,14 @@
+eval_id,timestamp,label,agent,run,steps,opponent,games,wins,draws,losses,win_rate,ci_low,ci_high,seed
+20261104-134044-9e42,2026-11-04T13:40:44,r0_sched_s2-5M,runs/r0_sched_s2/ckpt_5001216.pt,r0_sched_s2,5001216,random,100,89,0,11,0.89,0.8137,0.9375,0
+20261104-134044-9e42,2026-11-04T13:40:44,r0_sched_s2-5M,runs/r0_sched_s2/ckpt_5001216.pt,r0_sched_s2,5001216,noop,100,100,0,0,1.0,0.963,1.0,0
+20261104-134044-9e42,2026-11-04T13:40:44,r0_sched_s2-5M,runs/r0_sched_s2/ckpt_5001216.pt,r0_sched_s2,5001216,back,100,47,53,0,0.47,0.3751,0.5671,0
+20261104-134313-9d81,2026-11-04T13:43:13,r0_sched_s2-10M,runs/r0_sched_s2/ckpt_10002432.pt,r0_sched_s2,10002432,random,100,74,2,24,0.74,0.6463,0.816,0
+20261104-134313-9d81,2026-11-04T13:43:13,r0_sched_s2-10M,runs/r0_sched_s2/ckpt_10002432.pt,r0_sched_s2,10002432,noop,100,0,100,0,0.0,0.0,0.037,0
+20261104-134313-9d81,2026-11-04T13:43:13,r0_sched_s2-10M,runs/r0_sched_s2/ckpt_10002432.pt,r0_sched_s2,10002432,back,100,0,100,0,0.0,0.0,0.037,0
+20261104-134534-c6d2,2026-11-04T13:45:34,r0_sched_s2-15M,runs/r0_sched_s2/ckpt_15000576.pt,r0_sched_s2,15000576,random,100,82,0,18,0.82,0.7333,0.883,0
+20261104-134534-c6d2,2026-11-04T13:45:34,r0_sched_s2-15M,runs/r0_sched_s2/ckpt_15000576.pt,r0_sched_s2,15000576,noop,100,0,100,0,0.0,0.0,0.037,0
+20261104-134534-c6d2,2026-11-04T13:45:34,r0_sched_s2-15M,runs/r0_sched_s2/ckpt_15000576.pt,r0_sched_s2,15000576,back,100,0,100,0,0.0,0.0,0.037,0
+20261104-134759-a25e,2026-11-04T13:47:59,r0_sched_s2-final,runs/r0_sched_s2/final.pt,r0_sched_s2,19998720,random,100,75,1,24,0.75,0.657,0.8245,0
+20261104-134759-a25e,2026-11-04T13:47:59,r0_sched_s2-final,runs/r0_sched_s2/final.pt,r0_sched_s2,19998720,noop,100,0,100,0,0.0,0.0,0.037,0
+20261104-134759-a25e,2026-11-04T13:47:59,r0_sched_s2-final,runs/r0_sched_s2/final.pt,r0_sched_s2,19998720,back,100,0,100,0,0.0,0.0,0.037,0
+20261104-135106-2b70,2026-11-04T13:51:06,r0_sched_s2-final-bot,runs/r0_sched_s2/final.pt,r0_sched_s2,19998720,footsies_bot,100,63,0,37,0.63,0.5322,0.7182,0
