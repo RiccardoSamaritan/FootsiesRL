@@ -78,41 +78,64 @@ def wilson_interval(k, n, z=1.96):
 
 
 # ---------------------------------------------------------------- playing
-def csv_path(label):
-    return RESULTS / f"h2h_{label}.csv"
+def csv_path(label, shard=(0, 1)):
+    """results/h2h_<label>.csv; a shard k of n (n > 1) writes its own file h2h_<label>.s<k>of<n>.csv."""
+    k, n = shard
+    return RESULTS / (f"h2h_{label}.csv" if n == 1 else f"h2h_{label}.s{k}of{n}.csv")
 
 
-def load_pairs(path):
-    """Pairs saved so far: {(a, b): row} (the latest line wins)."""
+def load_pairs(label):
+    """Pairs saved so far in every file of the pool (plain and shards): {(a, b): row}."""
+    files = [RESULTS / f"h2h_{label}.csv", *sorted(RESULTS.glob(f"h2h_{label}.s*of*.csv"))]
     pairs = {}
-    if Path(path).exists():
-        with open(path, newline="") as f:
-            for r in csv.DictReader(f):
-                pairs[(r["a"], r["b"])] = r
+    for path in files:
+        if path.exists():
+            with open(path, newline="") as f:
+                for r in csv.DictReader(f):
+                    pairs[(r["a"], r["b"])] = r
     return pairs
 
 
-def run_pairs(agent_paths, games, parallel, seed, out):
-    """Play every missing pair and append it to the CSV."""
+def sort_key(label):
+    """Order agents by variant, then seed, then checkpoint (r0_s2/final after r0_s2/ckpt_5001216)."""
+    run, stem = label.split("/")
+    m = re.search(r"_s(\d+)$", run)
+    steps = int(stem.split("_")[1]) if stem.startswith("ckpt_") else 10**12
+    return (variant_of(label), int(m.group(1)) if m else 0, steps)
+
+
+def run_pairs(agent_paths, games, parallel, seed, label, shard=(0, 1)):
+    """Play every missing pair of the shard and append it to the shard's CSV.
+
+    All pairs i < j are numbered in a fixed order; shard k of n plays those with
+    number % n == k, so n jobs can share a pool without playing the same pair.
+    """
     from evaluate import evaluate, make_player  # needs the game server: imported only here
 
     labels = [agent_label(p) for p in agent_paths]
     if len(set(labels)) != len(labels):
         raise SystemExit("two agents have the same <run>/<file> name")
-    done = load_pairs(out)
+    k, n_shards = shard
+    out = csv_path(label, shard)
+    done = load_pairs(label)
     new_file = not Path(out).exists()
     Path(out).parent.mkdir(parents=True, exist_ok=True)
-    todo = sum(1 for i in range(len(labels)) for j in range(i + 1, len(labels))
-               if (labels[i], labels[j]) not in done and (labels[j], labels[i]) not in done)
-    print(f"{len(labels)} agents, {todo} pairs to play ({games} games each)", flush=True)
+    # pair number of (i, j): position in the fixed order i < j
+    number = {}
+    for i in range(len(labels)):
+        for j in range(i + 1, len(labels)):
+            number[(i, j)] = len(number)
+    mine = lambda i, j: number[(i, j)] % n_shards == k and \
+        (labels[i], labels[j]) not in done and (labels[j], labels[i]) not in done
+    todo = sum(1 for (i, j) in number if mine(i, j))
+    print(f"{len(labels)} agents, shard {k}/{n_shards}: {todo} pairs to play ({games} games each)", flush=True)
     played = 0
     with open(out, "a", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=FIELDS)
         if new_file:
             writer.writeheader()
         for i, path_i in enumerate(agent_paths):
-            rivals = [j for j in range(i + 1, len(labels))
-                      if (labels[i], labels[j]) not in done and (labels[j], labels[i]) not in done]
+            rivals = [j for j in range(i + 1, len(labels)) if mine(i, j)]
             if not rivals:
                 continue
             agent = make_player(path_i, seed=seed + 1, frame_skip=4)
@@ -236,22 +259,26 @@ def main():
     p.add_argument("--parallel", type=int, default=48)
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--plot-only", action="store_true", help="do not play, redraw from the CSV")
+    p.add_argument("--shard", default="0/1",
+                   help="K/N: play only the pairs with number %% N == K (N jobs share one pool); "
+                        "draw the figure afterwards with --plot-only")
     args = p.parse_args()
 
-    out = csv_path(args.label)
+    k, n_shards = (int(x) for x in args.shard.split("/"))
+    if not 0 <= k < n_shards:
+        raise SystemExit("--shard K/N needs 0 <= K < N")
     if not args.plot_only:
         paths = expand(args.agents)
         if len(paths) < 2:
             raise SystemExit("need at least two agents")
-        run_pairs(paths, args.games, args.parallel, args.seed, out)
-        labels = [agent_label(x) for x in paths]
-    else:
-        labels = None
-    pairs = load_pairs(out)
+        run_pairs(paths, args.games, args.parallel, args.seed, args.label, (k, n_shards))
+        if n_shards > 1:
+            print("shard done: when every shard has finished, draw the figure with --plot-only")
+            return
+    pairs = load_pairs(args.label)
     if not pairs:
-        raise SystemExit(f"no pairs in {out}")
-    if labels is None:  # every agent that appears in the file, in order of first appearance
-        labels = list(dict.fromkeys(x for ab in pairs for x in ab))
+        raise SystemExit(f"no pairs for pool {args.label!r} in {RESULTS}")
+    labels = sorted({x for ab in pairs for x in ab}, key=sort_key)
     fig_dir = RESULTS / "figures"
     fig_dir.mkdir(parents=True, exist_ok=True)
     plot_matrix(pairs, labels, fig_dir / f"h2h_{args.label}.png", args.label)
