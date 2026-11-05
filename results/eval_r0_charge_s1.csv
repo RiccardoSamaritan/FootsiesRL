@@ -1,0 +1,14 @@
+eval_id,timestamp,label,agent,run,steps,opponent,games,wins,draws,losses,win_rate,ci_low,ci_high,seed
+20261105-164000-9aed,2026-11-05T16:40:00,r0_charge_s1-5M,runs/r0_charge_s1/ckpt_5001216.pt,r0_charge_s1,5001216,random,100,75,0,25,0.75,0.657,0.8245,0
+20261105-164000-9aed,2026-11-05T16:40:00,r0_charge_s1-5M,runs/r0_charge_s1/ckpt_5001216.pt,r0_charge_s1,5001216,noop,100,100,0,0,1.0,0.963,1.0,0
+20261105-164000-9aed,2026-11-05T16:40:00,r0_charge_s1-5M,runs/r0_charge_s1/ckpt_5001216.pt,r0_charge_s1,5001216,back,100,100,0,0,1.0,0.963,1.0,0
+20261105-164224-6fe8,2026-11-05T16:42:24,r0_charge_s1-10M,runs/r0_charge_s1/ckpt_10002432.pt,r0_charge_s1,10002432,random,100,58,0,42,0.58,0.4821,0.672,0
+20261105-164224-6fe8,2026-11-05T16:42:24,r0_charge_s1-10M,runs/r0_charge_s1/ckpt_10002432.pt,r0_charge_s1,10002432,noop,100,0,100,0,0.0,0.0,0.037,0
+20261105-164224-6fe8,2026-11-05T16:42:24,r0_charge_s1-10M,runs/r0_charge_s1/ckpt_10002432.pt,r0_charge_s1,10002432,back,100,0,100,0,0.0,0.0,0.037,0
+20261105-164446-94f3,2026-11-05T16:44:46,r0_charge_s1-15M,runs/r0_charge_s1/ckpt_15000576.pt,r0_charge_s1,15000576,random,100,65,2,33,0.65,0.5525,0.7364,0
+20261105-164446-94f3,2026-11-05T16:44:46,r0_charge_s1-15M,runs/r0_charge_s1/ckpt_15000576.pt,r0_charge_s1,15000576,noop,100,4,96,0,0.04,0.0157,0.0984,0
+20261105-164446-94f3,2026-11-05T16:44:46,r0_charge_s1-15M,runs/r0_charge_s1/ckpt_15000576.pt,r0_charge_s1,15000576,back,100,0,100,0,0.0,0.0,0.037,0
+20261105-164650-4fca,2026-11-05T16:46:50,r0_charge_s1-final,runs/r0_charge_s1/final.pt,r0_charge_s1,19998720,random,100,82,1,17,0.82,0.7333,0.883,0
+20261105-164650-4fca,2026-11-05T16:46:50,r0_charge_s1-final,runs/r0_charge_s1/final.pt,r0_charge_s1,19998720,noop,100,86,14,0,0.86,0.7786,0.9147,0
+20261105-164650-4fca,2026-11-05T16:46:50,r0_charge_s1-final,runs/r0_charge_s1/final.pt,r0_charge_s1,19998720,back,100,0,100,0,0.0,0.0,0.037,0
+20261105-164903-d9c8,2026-11-05T16:49:03,r0_charge_s1-final-bot,runs/r0_charge_s1/final.pt,r0_charge_s1,19998720,footsies_bot,100,76,0,24,0.76,0.6677,0.8331,0
