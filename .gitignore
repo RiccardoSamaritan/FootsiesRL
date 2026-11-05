@@ -221,3 +221,5 @@ binaries/
 runs/
 .DS_Store
 slurm/logs/
+
+important.md
