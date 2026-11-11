@@ -616,8 +616,8 @@ For each update:
 | Sbatch | Runs | Status |
 |---|---|---|
 | `slurm/floor_array.sbatch` | 9: `r0_floor_s1..5`, `r1_floor_s2..5` | to run / no results yet |
-| `slurm/ablations_array.sbatch` | 6: λ 0 and 1, γ 0.99, charge, delay 0 and 12 (all seed 1) | to run / no results yet |
-| `slurm/br_array.sbatch` | 5 best responses (seed 1 of R0, Sched., R1, R2, R3); 5 more with `SEED=2` | to run / no results yet |
+| `slurm/ablations_array.sbatch` | 6: λ 0 and 1, γ 0.99, charge, delay 0 and 12 (all seed 1) | 5 of 6 done (no results for `r0_delay0_s1` yet) |
+| `slurm/br_array.sbatch` | 5 best responses (seed 1 of R0, Sched., R1, R2, R3); 5 more with `SEED=2` | 4 of 5 done (`r0_sched_s1` missing); `SEED=2` to run |
 | `slurm/h2h_array.sbatch` | 8 shards per pool (`final`, `time`) | `final` done, `time` to run |
 
 Orfeo allows at most 20 jobs in the queue and 5 running, so each array goes in waves of 5 jobs of about 1.5 h.
@@ -688,12 +688,12 @@ There are 3 comparisons: the 2 paper baselines, the reward functions and the bia
 | Priority | Experiment | What changes | Runs | Question | Status |
 |---|---|---|---|---|---|
 | Core | Paper baselines | fixed entropy (0.025) vs Sched. (0.1 -> 0), both on R0 | `r0`, `r0_sched`, 5 seeds | Does the entropy schedule change stalls and robustness, as in the paper? | done |
-| Core | Reward | R0, R1, R2, R3 (§4.5) | 5 seeds each | Which reward gives the strongest and least exploitable agent? | done (best response to run) |
-| Core | Exploitability | best response against seed 1 of each variant (§6.3) | 5 (+5 with a second learner seed) | Does head-to-head strength match low exploitability? | to run |
-| Core | Bias and variance | GAE $\lambda$ 0 and 1 vs 0.95; $\gamma$ 0.99 vs 0.995, on R0 | 1 seed each | How do speed and stability change with more bias (TD) or more variance (Monte Carlo)? | to run |
+| Core | Reward | R0, R1, R2, R3 (§4.5) | 5 seeds each | Which reward gives the strongest and least exploitable agent? | done (best responses for R0–R3 in §8.4) |
+| Core | Exploitability | best response against seed 1 of each variant (§6.3) | 5 (+5 with a second learner seed) | Does head-to-head strength match low exploitability? | 4 of 5 done (`r0_sched_s1` and the second learner seed to run) |
+| Core | Bias and variance | GAE $\lambda$ 0 and 1 vs 0.95; $\gamma$ 0.99 vs 0.995, on R0 | 1 seed each | How do speed and stability change with more bias (TD) or more variance (Monte Carlo)? | done (§8.5) |
 | Secondary | Stall fix | `--adv-std-floor 0.1` on R0 and R1 | `r0_floor`, `r1_floor`, 5 seeds each | Does the fix reduce stalls on more than one seed, and does it change strength? | 1 of 10 runs done |
-| Secondary | Charge actions | `use_special_charge_action` on (9 actions, 88-dim observation), on R0 | 1 seed | Does the agent discover and use the specials? | to run |
-| Secondary | Action delay | `action_delay` 0 and 12 vs 8, on R0 | 1 seed each | With delay 0 does the game become reactive and brittle, as in the paper? | to run |
+| Secondary | Charge actions | `use_special_charge_action` on (9 actions, 88-dim observation), on R0 | 1 seed | Does the agent discover and use the specials? | done (§8.5; use of the specials to verify with `src/diagnostics.py`) |
+| Secondary | Action delay | `action_delay` 0 and 12 vs 8, on R0 | 1 seed each | With delay 0 does the game become reactive and brittle, as in the paper? | delay 12 done (§8.5), delay 0 to run |
 | Optional | Checkpoint pool (PFSP) | self-play against past snapshots | — | Does the pool reduce exploitability? | — |
 | Optional | Timeout penalty | symmetric penalty, outside zero-sum | — | Does it discourage passivity, and what does the evaluation lose? | — |
 
@@ -703,9 +703,11 @@ The bias–variance runs and the two game ablations are all in `slurm/ablations_
 
 ## 8. Results so far
 
-The five comparison variants now have **5 seeds each**, the final checkpoints have been evaluated against the fixed opponents and the `final` head-to-head pool is complete. The ablations, the stall fix on 5 seeds and the best responses have not produced results yet, so the guiding question (§1) is still **open**: head-to-head strength is measured, exploitability is not.
+The five comparison variants have **5 seeds each**, the final checkpoints have been evaluated against the fixed opponents and the `final` head-to-head pool is complete. Since then the best responses against seed 1 of R0, R1, R2 and R3 (§8.4) and five of the six ablations, all except `r0_delay0_s1` (§8.5), have finished. Still missing are the best response against `r0_sched_s1`, the second learner seed, the stall fix on 5 seeds and the `time` pool. The guiding question (§1) therefore has a **first, partial answer**: head-to-head strength and exploitability are now both measured, but on one seed per variant and one learner seed per target.
 
-**Against the fixed opponents** (final checkpoints, 100 matches per opponent and seed, `results/summary_final.csv`; mean over seeds, min–max in brackets):
+### 8.1 Against the fixed opponents
+
+Final checkpoints, 100 matches per opponent and seed, `results/summary_final.csv`; mean over seeds, min–max in brackets:
 
 | Variant | Seeds | vs random | vs FootsiesBot | vs noop (wins) | vs back (wins) |
 |---|---|---|---|---|---|
@@ -724,14 +726,18 @@ Every match against noop or back that is not won is a draw (no losses), so the d
 - **The spread between seeds is often larger than the difference between variants**: against FootsiesBot the ranges of R0, Sched., R1 and R2 overlap almost completely (Sched. goes from 13% to 87%). With 5 seeds the ordering of these four is not reliable; only R3 stands out.
 - **R1_floor** is still the best single agent against FootsiesBot (84%), but it is one seed: the 5-seed comparison is in §7.
 
-**Reactivity and loss of initiative.** Against an opponent that stands still or runs away the final agents almost never win: every non-won match is a timeout. The paper observes the same thing: the best policies become reactive and do not start the fight. Two new facts refine this picture:
+### 8.2 Reactivity and loss of initiative
+
+Against an opponent that stands still or runs away the final agents almost never win: every non-won match is a timeout. The paper observes the same thing: the best policies become reactive and do not start the fight. Two new facts refine this picture:
 
 - it is **not absolute**: some final seeds do take the initiative against noop (R0 up to 34%, R2 up to 50%);
 - it **emerges during training**: several runs beat the passive opponents at the early checkpoints and lose this ability later. For example, `r3_s5` beats noop and back in 100% of the matches at 5M steps and in 0% at the end; `r3_s4` beats noop 100% at 10M; `r1_s2` beats noop 100% at 5M; `r0_sched_s4` 90% at 5M. In all these cases the final checkpoints draw 100% of the matches.
 
 So the agents **can** attack an opponent that stands still, but self-play pushes them away from it: against an opponent that is itself reactive, starting the fight is punished. This matches the hypothesis of §2.4 (whiffing an attack is costly, waiting is not), still to be verified on the `time` pool and in the videos. It also does not mean the agents cannot play: against FootsiesBot, which attacks, most seeds win most matches.
 
-**Head-to-head** (`final` pool: 26 agents, 325 pairs, 100 matches per pair, `results/h2h_final.s*of8.csv`, figure `h2h_final.png`):
+### 8.3 Head-to-head
+
+`final` pool: 26 agents, 325 pairs, 100 matches per pair, `results/h2h_final.s*of8.csv`, figure `h2h_final.png`:
 
 | Variant | Mean score of its agents | Best seed | Worst seed |
 |---|---|---|---|
@@ -746,7 +752,44 @@ The per-variant value is the mean of the ranking scores of its 5 agents (`result
 
 - **All variants are close to 0.5** and R3 is again last, consistent with the fixed opponents.
 - **The best and the worst agent are both PPO (Sched.)** (0.65 and 0.36): the entropy schedule gives the largest spread between seeds.
-- **Many pairs end in 100% draws.** Some agents are passive against almost everyone: `r0_s5`, for example, draws all 100 matches against several agents of every variant, so its score of 0.50 says nothing about its strength (§8.5). When both agents are reactive the match is a timeout; when at least one is less passive, matches are decided.
-- **Head-to-head ranking and fixed opponents do not agree.** R1 is the best variant against random and FootsiesBot but slightly below 0.5 head-to-head, while R0 is the other way round. A strong result against simple opponents does not imply a strong result against other learned agents. Whether it implies **low exploitability** is exactly what the best responses (§6.3) still have to measure.
+- **Many pairs end in 100% draws.** Some agents are passive against almost everyone: `r0_s5`, for example, draws all 100 matches against several agents of every variant, so its score of 0.50 says nothing about its strength (§8.4). When both agents are reactive the match is a timeout; when at least one is less passive, matches are decided.
+- **Head-to-head ranking and fixed opponents do not agree.** R1 is the best variant against random and FootsiesBot but slightly below 0.5 head-to-head, while R0 is the other way round. A strong result against simple opponents does not imply a strong result against other learned agents. Whether it implies **low exploitability** is measured by the best responses in §8.4.
 
 The draws against the fixed opponents and in head-to-head are therefore partly a property of the game and of self-play, not only of the reward: the comparison has to keep the two effects apart.
+
+### 8.4 Exploitability
+
+Approximate best responses (§6.3): one learner per target, trained for 20M steps, then 500 matches against the target with sides alternated (`results/br_<target>.csv`). The targets are the final checkpoints of seed 1 of each variant. The head-to-head columns come from `results/h2h_final_ranking.csv` (26 agents). The **BR score** uses the same definition as head-to-head (§6.1), $(W + 0.5\,D)/500$, so that a learner that only draws gets 0.5.
+
+| Target | H2H score | H2H rank (of 26) | BR wins / draws / losses | BR win rate (95% CI) | BR score |
+|---|---|---|---|---|---|
+| `r0_s1` | 0.50 | 15 | 241 / 222 / 37 | 0.48 (0.44–0.53) | 0.70 |
+| `r1_s1` | 0.48 | 18 | 0 / 500 / 0 | 0.00 (0.00–0.01) | 0.50 |
+| `r2_s1` | 0.43 | 23 | 499 / 0 / 1 | 1.00 (0.99–1.00) | 1.00 |
+| `r3_s1` | 0.40 | 24 | 494 / 0 / 6 | 0.99 (0.97–0.99) | 0.99 |
+| `r0_sched_s1` | 0.36 | 26 | — | to run | — |
+
+- **The two weakest head-to-head agents are almost completely exploitable.** `r2_s1` and `r3_s1` are 23rd and 24th of 26, and a dedicated learner beats them in 99–100% of the matches, with no draws. Their head-to-head scores (0.43 and 0.40) are not lower only because many of their pairs end in 100% draws (§8.3): a draw against another passive agent costs nothing, but an opponent that attacks them wins almost always. For `r2_s1` this matches the fixed opponents (18% against random, 5% against FootsiesBot, the outlier seed of §8.1).
+- **`r0_s1` is exploitable, but much less.** Its BR win rate (0.48) is below 0.5, but the learner loses only 37 matches out of 500: of the decided matches it wins 87%. The BR score of 0.70 shows a real, partial weakness, while 44% of the matches still end in a timeout. The rule of thumb of §6.3 ("close to 0.5 or lower means no systematic weakness") has to be read together with the draws.
+- **`r1_s1` is not exploited, but this says little.** The learner draws all 500 matches: it never wins and never loses. This is the case anticipated in §6.3: against a passive target, a learner that only draws has not exploited it, and the lower bound carries no information. `r1_s1` is itself passive in head-to-head (100% draws against several agents). The learner's training log in `runs_br/br_r1_s1_b1/` should show whether its win rate was ever above zero, i.e. whether the learner also ended in a stall (§5.4).
+- **A first, partial answer to the guiding question.** On these four targets, head-to-head strength and exploitability point the same way at the bottom of the ranking: the agents that rank lowest are also the most exploitable. There is no case yet like the one in the paper, an agent that is strong head-to-head and still highly exploitable. Results against simple opponents are less informative: `r0_s1` (88% against random, 66% against FootsiesBot) and `r1_s1` (90% and 76%) win comparably, yet one is moderately exploitable and the other gives no information. All of this rests on one seed per variant and one learner seed per target. The `SEED=2` learners and the `r0_sched_s1` target, last in head-to-head, are needed before drawing conclusions.
+
+### 8.5 Ablations
+
+One seed each, final checkpoints, 100 matches per opponent, `results/eval_<run>.csv`. The reference is `r0_s1`. For comparison, the R0 range over its 5 seeds (§8.1) is 41–88% against random and 53–90% against FootsiesBot.
+
+| Run | What changes | vs random | vs FootsiesBot | vs noop (wins) | vs back (wins) |
+|---|---|---|---|---|---|
+| `r0_s1` (reference) | — | 88% | 66% | 0% | 0% |
+| `r0_lam0_s1` | GAE $\lambda = 0$ (one-step TD) | 5% | 4% | 0% | 0% |
+| `r0_lam1_s1` | GAE $\lambda = 1$ (Monte Carlo) | 81% | 83% | 0% | 0% |
+| `r0_gamma099_s1` | $\gamma = 0.99$ | 69% | 85% | 0% | 0% |
+| `r0_charge_s1` | charge actions on | 82% | 76% | 86% | 0% |
+| `r0_delay12_s1` | `action_delay` 12 | 70% | 39% | 100% | 50% |
+| `r0_delay0_s1` | `action_delay` 0 | — | — | — | — |
+
+- **$\lambda = 0$ never learns.** It wins 4–9% against random at every checkpoint (5% at 5M, 4% at 10M, 9% at 15M, 5% at the end) and 4% against FootsiesBot (74 losses, 22 draws). This is consistent with the bias side of §5.3: with pure one-step TD and only a terminal reward, the win reaches the early actions only through the critic's bootstrap, across up to thousands of steps (§4.3), and in 20M steps this does not happen.
+- **$\lambda = 1$ and $\gamma = 0.99$ do not hurt, at least on one seed.** Against FootsiesBot they reach 83% and 85%, above `r0_s1` (66%) but inside the R0 range (53–90%); against random 81% and 69%, also inside the range. With one seed the effect cannot be separated from the spread between seeds. Like many comparison runs, `r0_lam1_s1` beats noop and back at 5M (98% and 94%) and loses this ability by the end (§8.2).
+- **With charge actions the agent attacks a passive opponent again.** It beats noop in 86% of the matches at the end, more than any R0 seed (at most 34%). The ability goes from 100% at 5M to 0% at 10M and returns at the end, while against back it stays at 0%. Winning requires landing a special, which with these actions takes a single action instead of 15 consecutive steps (§2.3), so the agent plausibly uses them; `src/diagnostics.py` (share of charge actions) should confirm it.
+- **Delay 12: more initiative, weaker against FootsiesBot.** It is the only agent that, at the end of training, beats noop in 100% of the matches and back in 50%, but against FootsiesBot it falls to 39%, below the whole R0 range. With $D = 12$ the reaction time is 12–16 frames, and by the rule of §2.4 the recovery of `B_ATTACK` (15) becomes only *sometimes* punishable on reaction: whiffing is cheaper, which fits the hypothesis that passivity comes from the cost of whiffing (to be verified).
+- **Delay 0 is still missing**, so the paper's observation that the game becomes reactive and brittle (§2.4) is not yet verified.
