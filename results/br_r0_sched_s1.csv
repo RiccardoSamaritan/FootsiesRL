@@ -1,0 +1,2 @@
+timestamp,target,target_run,br_run,br_steps,games,br_wins,draws,br_losses,br_win_rate,ci_low,ci_high
+2026-11-10T18:29:55,runs/r0_sched_s1/final.pt,r0_sched_s1,br_r0_sched_s1_b2,19998720,500,249,247,4,0.498,0.4544,0.5417

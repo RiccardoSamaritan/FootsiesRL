@@ -1,0 +1,14 @@
+eval_id,timestamp,label,agent,run,steps,opponent,games,wins,draws,losses,win_rate,ci_low,ci_high,seed
+20261110-175414-adac,2026-11-10T17:54:14,r1_floor_s3-5M,runs/r1_floor_s3/ckpt_5001216.pt,r1_floor_s3,5001216,random,100,87,0,13,0.87,0.7902,0.9224,0
+20261110-175414-adac,2026-11-10T17:54:14,r1_floor_s3-5M,runs/r1_floor_s3/ckpt_5001216.pt,r1_floor_s3,5001216,noop,100,100,0,0,1.0,0.963,1.0,0
+20261110-175414-adac,2026-11-10T17:54:14,r1_floor_s3-5M,runs/r1_floor_s3/ckpt_5001216.pt,r1_floor_s3,5001216,back,100,52,48,0,0.52,0.4232,0.6154,0
+20261110-175627-3379,2026-11-10T17:56:27,r1_floor_s3-10M,runs/r1_floor_s3/ckpt_10002432.pt,r1_floor_s3,10002432,random,100,74,0,26,0.74,0.6463,0.816,0
+20261110-175627-3379,2026-11-10T17:56:27,r1_floor_s3-10M,runs/r1_floor_s3/ckpt_10002432.pt,r1_floor_s3,10002432,noop,100,59,41,0,0.59,0.492,0.6813,0
+20261110-175627-3379,2026-11-10T17:56:27,r1_floor_s3-10M,runs/r1_floor_s3/ckpt_10002432.pt,r1_floor_s3,10002432,back,100,10,90,0,0.1,0.0552,0.1744,0
+20261110-175842-aff6,2026-11-10T17:58:42,r1_floor_s3-15M,runs/r1_floor_s3/ckpt_15000576.pt,r1_floor_s3,15000576,random,100,89,0,11,0.89,0.8137,0.9375,0
+20261110-175842-aff6,2026-11-10T17:58:42,r1_floor_s3-15M,runs/r1_floor_s3/ckpt_15000576.pt,r1_floor_s3,15000576,noop,100,0,100,0,0.0,0.0,0.037,0
+20261110-175842-aff6,2026-11-10T17:58:42,r1_floor_s3-15M,runs/r1_floor_s3/ckpt_15000576.pt,r1_floor_s3,15000576,back,100,0,100,0,0.0,0.0,0.037,0
+20261110-180100-32de,2026-11-10T18:01:00,r1_floor_s3-final,runs/r1_floor_s3/final.pt,r1_floor_s3,19998720,random,100,88,0,12,0.88,0.8019,0.93,0
+20261110-180100-32de,2026-11-10T18:01:00,r1_floor_s3-final,runs/r1_floor_s3/final.pt,r1_floor_s3,19998720,noop,100,2,98,0,0.02,0.0055,0.07,0
+20261110-180100-32de,2026-11-10T18:01:00,r1_floor_s3-final,runs/r1_floor_s3/final.pt,r1_floor_s3,19998720,back,100,0,100,0,0.0,0.0,0.037,0
+20261110-180230-5ea5,2026-11-10T18:02:30,r1_floor_s3-final-bot,runs/r1_floor_s3/final.pt,r1_floor_s3,19998720,footsies_bot,100,76,0,24,0.76,0.6677,0.8331,0
