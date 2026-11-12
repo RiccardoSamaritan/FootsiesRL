@@ -202,8 +202,11 @@ def main():
             if writer is None:
                 writer = csv.DictWriter(log_file, fieldnames=list(row))
                 writer.writeheader()
-            writer.writerow(row)
-            log_file.flush()
+            try:
+                writer.writerow(row)
+                log_file.flush()
+            except OSError as e:  # transient I/O error on the shared filesystem: do not kill the run
+                print(f"warning: log write failed at update {update}: {e}", flush=True)
             if update % 10 == 0 or update == 1:
                 print(f"update {update}/{num_updates} steps {steps} "
                       f"{steps / (time.time() - t_start):.0f} step/s  BR win {row['br_win']:.2f} "
