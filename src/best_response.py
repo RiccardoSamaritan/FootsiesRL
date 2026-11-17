@@ -48,7 +48,8 @@ RESULTS = Path(__file__).resolve().parent.parent / "results"
 def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--target", required=True, help="checkpoint to exploit (e.g. runs/r0_s1/final.pt)")
-    p.add_argument("--run-name", default=None, help="default: br_<target run>_b<seed>")
+    p.add_argument("--run-name", default=None,
+                   help="default: br_<target run>_b<seed> (+ _floor if --adv-std-floor > 0)")
     p.add_argument("--out-dir", default="runs_br")
     p.add_argument("--total-steps", type=int, default=20_000_000)
     p.add_argument("--num-envs", type=int, default=48)
@@ -60,6 +61,8 @@ def parse_args():
     p.add_argument("--gamma", type=float, default=0.995)
     p.add_argument("--lr", type=float, default=1e-4)
     p.add_argument("--ent-coef", type=float, default=0.025)
+    p.add_argument("--adv-std-floor", type=float, default=0.0,
+                   help="divide advantages by max(std, floor); 0 = original PPO")
     p.add_argument("--checkpoint-every", type=int, default=5_000_000, help="steps")
     p.add_argument("--eval-games", type=int, default=500, help="final games against the target (0 = skip)")
     p.add_argument("--overwrite", action="store_true")
@@ -105,7 +108,8 @@ def main():
     args = parse_args()
     target = load_policy_opponent(args.target, device=args.device)
     target_run = Path(args.target).parent.name
-    run_name = args.run_name or f"br_{target_run}_b{args.seed}"
+    run_name = args.run_name or (f"br_{target_run}_b{args.seed}"
+                                 + ("_floor" if args.adv_std_floor > 0 else ""))
     run_dir = os.path.join(args.out_dir, run_name)
     if args.eval_only:
         final_path = os.path.join(run_dir, "final.pt")
@@ -124,7 +128,8 @@ def main():
     torch.manual_seed(args.seed)
     device = torch.device(args.device)
     game_cfg = game_settings(target)
-    cfg = PPOConfig(gamma=args.gamma, gae_lambda=args.gae_lambda, lr=args.lr, ent_coef=args.ent_coef)
+    cfg = PPOConfig(gamma=args.gamma, gae_lambda=args.gae_lambda, lr=args.lr, ent_coef=args.ent_coef,
+                    adv_std_floor=args.adv_std_floor)
     with open(os.path.join(run_dir, "config.json"), "w") as f:
         json.dump({"args": vars(args), "ppo": asdict(cfg), "game": game_cfg,
                    "target_steps": target.steps}, f, indent=2)
