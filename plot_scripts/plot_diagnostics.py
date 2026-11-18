@@ -3,7 +3,7 @@
   results/figures/diag_stall.png    self-play: share of decided games and share of attack actions
   results/figures/diag_actions.png  self-play: action distribution per model
 
-Usage:  python3 -I src/plot_diagnostics.py
+Usage:  python3 -I plots/plot_diagnostics.py
 """
 import csv
 from pathlib import Path

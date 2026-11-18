@@ -1,8 +1,8 @@
 """Figures from training logs (runs/<run>/log.csv) and evaluations (results/eval_<run>.csv).
 
-    uv run python src/plot_results.py                          # every run in runs/, grouped by variant
-    uv run python src/plot_results.py --runs r0_s1 r1_s1 r2_s1
-    uv run python src/plot_results.py --per-run                # one line per run, no grouping
+    uv run python plots/plot_results.py                          # every run in runs/, grouped by variant
+    uv run python plots/plot_results.py --runs r0_s1 r1_s1 r2_s1
+    uv run python plots/plot_results.py --per-run                # one line per run, no grouping
 
 Runs are grouped by variant: the run name without its seed suffix (r1_s3 -> r1,
 r0_sched_s2 -> r0_sched). A variant with several seeds is drawn as the mean over

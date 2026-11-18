@@ -80,11 +80,11 @@ Results are appended to `results/` (`eval_<run>.csv`, `h2h_*.csv`, `br_<target>.
 **Figures**
 
 ```bash
-uv run python src/plot_results.py && uv run python src/make_tables.py
-uv run python src/plot_report.py
-uv run python src/plot_paper_figures.py
-uv run python src/plot_diagnostics.py
-uv run python src/plot_local.py
+uv run python plots/plot_results.py && uv run python src/make_tables.py
+uv run python plots/plot_report.py
+uv run python plots/plot_paper_figures.py
+uv run python plots/plot_diagnostics.py
+uv run python plots/plot_local.py
 ```
 
 **Cluster (SLURM)**: every experiment has a script in `slurm/` with its usage in the header,
@@ -94,7 +94,8 @@ partition and account.
 ## Repository
 
 ```text
-src/        PPO, training, rewards, evaluation, figures (details: src/README.md)
+src/        PPO, training, rewards, evaluation, tables (details: src/README.md)
+plots/      scripts that draw the figures in results/figures
 slurm/      sbatch scripts of all experiments
 results/    evaluation CSVs, tables, figures (details: results/README.md)
 docs/       full report (footsies.md)

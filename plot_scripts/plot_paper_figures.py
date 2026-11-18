@@ -5,7 +5,7 @@
   results/figures/paper_heuristics.png    win rate vs Random and vs No-op over training, mean over
                                           5 seeds with 95% confidence band, as in the paper's Figure 3
 
-Usage:  python3 -I src/plot_paper_figures.py [--br-suffix _floor]
+Usage:  python3 -I plots/plot_paper_figures.py [--br-suffix _floor]
 """
 import argparse
 import csv

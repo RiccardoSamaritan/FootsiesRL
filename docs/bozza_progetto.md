@@ -280,11 +280,11 @@ FootsiesRL/
     rewards.py         varianti di reward (wrapper: potenziale, vittoria scalata sul tempo)
     policy.py          checkpoint come avversario (PolicyOpponent)
     head_to_head.py    matrice degli scontri diretti, a shard
-    plot_results.py    curve di training e di valutazione aggregate sui seed
     opponents.py       Random, No-op, Back e adattatore per FootsiesBot
     evaluate.py        partite, intervalli di confidenza, matrice head-to-head
     best_response.py   addestramento della best response
     diagnostics.py     statistiche sulle azioni, durata e primo attacco
+  plots/               script delle figure (plot_results.py, plot_report.py, plot_paper_figures.py, ...)
   results/             tabelle e figure
   test.py  visual_test.py   già presenti
 ```

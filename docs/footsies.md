@@ -677,11 +677,11 @@ so 0.5 means even and a draw (timeout, both passive) counts half. The output is 
 
 ### 6.2 Several seeds
 
-`src/plot_results.py` groups runs by variant (the name without `_s<seed>`). A variant with several seeds is drawn as the **mean over seeds with a min–max band**; a single run is drawn as it is, with its Wilson interval. `results/summary_final.csv` has, for each variant and opponent, the mean win rate of the final checkpoints and its min–max over seeds.
+`plots/plot_results.py` groups runs by variant (the name without `_s<seed>`). A variant with several seeds is drawn as the **mean over seeds with a min–max band**; a single run is drawn as it is, with its Wilson interval. `results/summary_final.csv` has, for each variant and opponent, the mean win rate of the final checkpoints and its min–max over seeds.
 
 The two kinds of uncertainty are different: the **Wilson interval** measures the noise of the evaluation (how many matches were played), the **band between seeds** measures how much the result changes from one training run to another. With 5 seeds the comparisons remain indicative. The only test made is for the stall fix (§8.6): a bootstrap over seeds of the difference of the means, whose 95% interval is wide (with 5 seeds per group the smallest detectable difference is about 0.3 in win rate).
 
-**Figures in the style of the paper.** `src/plot_paper_figures.py` draws `paper_heuristics.png`, in the format of the paper's Figure 3: the win rate against random and against noop at the checkpoints (5M, 10M, 15M, 20M), as the mean over the 5 seeds of each variant (R0, R0 Sched., R1, R2, R3, R0 floor, R1 floor) with a 95% confidence band from Student's $t$ with 4 degrees of freedom. Unlike the min–max band of `plot_results.py`, this band is an interval on the **mean**, not the range of the seeds. The same script draws the best-response figure of §6.3.
+**Figures in the style of the paper.** `plots/plot_paper_figures.py` draws `paper_heuristics.png`, in the format of the paper's Figure 3: the win rate against random and against noop at the checkpoints (5M, 10M, 15M, 20M), as the mean over the 5 seeds of each variant (R0, R0 Sched., R1, R2, R3, R0 floor, R1 floor) with a 95% confidence band from Student's $t$ with 4 degrees of freedom. Unlike the min–max band of `plot_results.py`, this band is an interval on the **mean**, not the range of the seeds. The same script draws the best-response figure of §6.3.
 
 ### 6.3 Approximate best response
 
@@ -697,7 +697,7 @@ The two kinds of uncertainty are different: the **Wilson interval** measures the
 
 The **BR win rate** is the measure of exploitability: close to 0.5 or lower means the learner found no systematic weakness in its budget; close to 1 means the target is easy to exploit. It is a **lower bound**, because PPO only finds the weaknesses it manages to discover in 20M steps (as in the paper, Section 4, and Timbers et al. 2020). Draws matter here too: a learner that only draws against a passive target has not exploited it.
 
-`slurm/br_array.sbatch` runs the 5 targets in parallel; `SEED=2 sbatch slurm/br_array.sbatch` adds a second learner seed per target, to see how much the estimate depends on the learner's training. A learner stopped by the time limit during training can be continued with `--resume` (§5.6); one that hits the limit after training can be evaluated alone with `--eval-only`. `src/plot_report.py` draws the learners' win rate during training (`report_br_curves.png`). `src/plot_paper_figures.py` draws `paper_br_outcomes.png`, in the format of the paper's Figure 4: the win, draw and loss rates of the **target** during the learners' training (per 1M-step bin, averaged over learner seeds with equal weight), with a bar for the final 500-match evaluation; `--br-suffix _floor` draws the same figure for the floored learners. The curves have the same bias as above; the bar is the measurement.
+`slurm/br_array.sbatch` runs the 5 targets in parallel; `SEED=2 sbatch slurm/br_array.sbatch` adds a second learner seed per target, to see how much the estimate depends on the learner's training. A learner stopped by the time limit during training can be continued with `--resume` (§5.6); one that hits the limit after training can be evaluated alone with `--eval-only`. `plots/plot_report.py` draws the learners' win rate during training (`report_br_curves.png`). `plots/plot_paper_figures.py` draws `paper_br_outcomes.png`, in the format of the paper's Figure 4: the win, draw and loss rates of the **target** during the learners' training (per 1M-step bin, averaged over learner seeds with equal weight), with a bar for the final 500-match evaluation; `--br-suffix _floor` draws the same figure for the floored learners. The curves have the same bias as above; the bar is the measurement.
 
 ### 6.4 Behaviour diagnostics
 
@@ -706,7 +706,7 @@ The win rate cannot tell a **stall** (no match is decided, whatever the agents d
 - the **action distribution** of the agent: the share of each action, the **attack share** (`ATTACK`, `BACK+ATTACK`, `FORWARD+ATTACK`) and, when the charge actions are enabled, the **special share** (the three charge actions);
 - for every finished match: outcome, length, whether anybody attacked, the time of the first attack and who made it.
 
-Results are appended to `results/diag_<run>.csv`, one row per matchup. `slurm/diagnostics_array.sbatch` runs 9 checkpoints (seed 1 of R0, R0 Sched., R1, R2, R3, R0 floor and R1 floor, plus `r0_charge_s1` and `r0_lam0_s1`), and `src/plot_diagnostics.py` draws `diag_stall.png` and `diag_actions.png`.
+Results are appended to `results/diag_<run>.csv`, one row per matchup. `slurm/diagnostics_array.sbatch` runs 9 checkpoints (seed 1 of R0, R0 Sched., R1, R2, R3, R0 floor and R1 floor, plus `r0_charge_s1` and `r0_lam0_s1`), and `plots/plot_diagnostics.py` draws `diag_stall.png` and `diag_actions.png`.
 
 The script also records the distance between the players from observation features 2 and 43, but in our extract these features are not informative, so the distance is not used in the results.
 

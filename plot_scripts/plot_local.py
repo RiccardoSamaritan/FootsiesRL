@@ -1,7 +1,12 @@
 """
-Usage:  uv run python src/plot_local.py
+Usage:  uv run python plots/plot_local.py
 """
 import os
+import sys
+from pathlib import Path
+
+# head_to_head.py stays in src/, the other plot scripts are in this folder
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 import matplotlib.pyplot as plt
 import numpy as np

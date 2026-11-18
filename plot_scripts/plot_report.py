@@ -5,7 +5,7 @@
   report_br_curves.png  best-response win rate during training, two BR seeds per target
   report_noop.png       win rate vs No-op at 5M, 10M, 15M and 20M steps, mean over seeds
 
-Usage:  python3 -I src/plot_report.py
+Usage:  python3 -I plots/plot_report.py
 """
 import csv
 from pathlib import Path

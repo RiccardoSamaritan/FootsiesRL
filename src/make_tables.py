@@ -1,9 +1,9 @@
 """Markdown tables of the final models against the fixed opponents, aggregated over seeds.
 
-Reads results/summary_final.csv (written by src/plot_results.py) and writes
+Reads results/summary_final.csv (written by plots/plot_results.py) and writes
 results/summary_heuristics.md.
 
-Usage:  python3 -I src/plot_results.py && python3 -I src/make_tables.py
+Usage:  python3 -I plots/plot_results.py && python3 -I src/make_tables.py
 """
 import csv
 from collections import defaultdict
