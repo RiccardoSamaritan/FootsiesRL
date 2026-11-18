@@ -576,17 +576,6 @@ The coefficient values are in §5.5.
 
 The fix (`--adv-std-floor`) divides by $\max(\text{std}, \text{floor})$ instead: small advantages stay small. With floor = 0 (default) nothing changes, so the baselines are untouched. It was first tried on one seed (`r1_floor_s1`: stalled matches from 30% to 4%) and then trained with floor 0.1 on 5 seeds for both R0 (`r0_floor_s1..5`) and R1 (`r1_floor_s1..5`) with `slurm/floor_array.sbatch`, compared seed by seed with `r0_s*` and `r1_s*`. The result is in §8.6: the final stalls go from 2 runs out of 8 to 0 out of 9 and the spread between seeds drops, while the mean strength does not change measurably. Limit: it removes the noise amplification, not the passivity against the fixed opponents (§8.2, §9.1). The same option is available for the best-response learner (§6.3).
 
-**Joint gradient clipping.** After the loss is computed, the gradient is clipped to a maximum norm of 0.5 (§5.5), as in the paper. The clip acts on the **global** norm over all parameters, i.e. on actor and critic together:
-
-$$
-\lVert g \rVert = \sqrt{\lVert g_{\text{actor}} \rVert^2 + \lVert g_{\text{critic}} \rVert^2}, \qquad
-g \leftarrow g \cdot \min\!\Big(1,\; \frac{0.5}{\lVert g \rVert}\Big).
-$$
-
-The two networks are separate (§5.5), but they share this scale factor. With returns on a ±10 scale the critic's gradient can be much larger than the actor's, and then the clip shrinks the actor's step by the same factor, even when the actor's own gradient is below 0.5. `src/check_grad_norm.py` measures this (§6.5): when matches are decided, the actor's step is about 10–80 times smaller than it would be if the actor were clipped alone; during stalls the critic's gradient is almost zero and the clip does not act (§8.8).
-
-The option `--clip-separately` clips actor and critic each on its own norm, to 0.5. With the default (off) nothing changes, so all the other runs are untouched. Since the actor's gradient norm measured so far is always below 0.5, with this option the actor's step is in practice not clipped at all, while the critic's still is. The option does not act during stalls, where the joint clip already does nothing. It is tested on R0 with 5 seeds (`r0_sepclip_s1..5`, `slurm/sepclip_array.sbatch`), to be compared with `r0_s*` and `r0_floor_s*`; the results are not available yet (§8.8).
-
 ### 5.5 Network and hyperparameters
 
 Two **separate** MLPs (no shared features), 2×256 ReLU (the same architecture used for all algorithms in the paper), orthogonal initialization (gain $\sqrt2$, 0.01 on the policy output, 1.0 on the value output), Adam with $\varepsilon = 10^{-5}$. Hyperparameters from Table 3 of the paper:
@@ -600,7 +589,7 @@ Two **separate** MLPs (no shared features), 2×256 ReLU (the same architecture u
 | entropy coeff. | 0.025 (fixed); 0.1 -> 0 linearly in PPO (Sched.) |
 | epochs × minibatches | 8 × 8 |
 | learning rate | $10^{-4}$, linearly decaying to 0 |
-| max gradient norm | 0.5, on the joint norm of actor and critic (on each network separately with `--clip-separately`, §5.4) |
+| max gradient norm | 0.5 |
 | parallel matches × rollout | 48 × 64 |
 | value clipping | off (returns on a ±10 scale) |
 
@@ -630,13 +619,12 @@ For each update:
 | `slurm/ablations_array.sbatch` | 6: λ 0 and 1, γ 0.99, charge, delay 0 and 12 (all seed 1) | done |
 | `slurm/br_array.sbatch` | 5 best responses (seed 1 of R0, Sched., R1, R2, R3), plus 5 with `SEED=2` | done |
 | `slurm/br_array.sbatch` with `FLOOR=0.1` | best responses with a floored learner (`br_<target>_b<seed>_floor`), targets R0, Sched., R1 (tasks 0–2) [TODO: learner seeds launched] | results pending |
-| `slurm/sepclip_array.sbatch` | 5: `r0_sepclip_s1..5` (R0 with `--clip-separately`) | results pending |
 | `slurm/diagnostics_array.sbatch` | behaviour diagnostics of 9 checkpoints (§6.4) | done |
 | `slurm/h2h_array.sbatch` | 8 shards per pool (`final`, `time`) | `final` done, `time` not played |
 
 Orfeo allows at most 20 jobs in the queue and 5 running, so each array goes in waves of 5 jobs of about 1.5 h. One best response failed twice on an I/O error of the shared filesystem (log not written); the code now ignores that write error.
 
-**Resuming a run.** A run stopped by the time limit can be continued with `--resume` (in `train.py` and `best_response.py`; `RESUME=1` in `br_array.sbatch` and `sepclip_array.sbatch`), with the same arguments as the original run. The latest `ckpt_*.pt` is loaded, `log.csv` is cut after that checkpoint and training continues from the next update. Checkpoints written before this option existed have no optimizer state: Adam then restarts with empty moment estimates, a small deviation from an uninterrupted run, which the script prints. [TODO: list the runs that were resumed, and whether from a checkpoint without optimizer state.]
+**Resuming a run.** A run stopped by the time limit can be continued with `--resume` (in `train.py` and `best_response.py`; `RESUME=1` in `br_array.sbatch`), with the same arguments as the original run. The latest `ckpt_*.pt` is loaded, `log.csv` is cut after that checkpoint and training continues from the next update. Checkpoints written before this option existed have no optimizer state: Adam then restarts with empty moment estimates, a small deviation from an uninterrupted run, which the script prints. [TODO: list the runs that were resumed, and whether from a checkpoint without optimizer state.]
 
 **Compute used.** S = one 20M-step PPO run.
 
@@ -647,10 +635,9 @@ Orfeo allows at most 20 jobs in the queue and 5 running, so each array goes in w
 | Ablations ($\lambda$ 0 and 1, $\gamma$ 0.99, charge, delay 0 and 12), 1 seed | 6 | 6 S |
 | Best responses: 5 targets, 2 learner seeds | 10 | 10 S |
 | **Total completed** | **51** | **51 S (1.02 billion steps)** |
-| Separate clipping: R0 sepclip, 5 seeds (results pending) | 5 | 5 S |
 | Best responses with a floored learner (results pending) | [TODO] | [TODO] |
 
-Evaluations, head-to-head, diagnostics and the gradient-norm check take a few minutes per model.
+Evaluations, head-to-head and diagnostics take a few minutes per model.
 
 Speeds measured on the full PPO: ~6700 steps/s on the Mac, ~4050 on an Orfeo THIN node with 4 threads; time is split between network updates (56–63%) and the simulator (25–37%). Real 20M-step runs on THIN took 85–100 minutes.
 
@@ -723,22 +710,11 @@ Results are appended to `results/diag_<run>.csv`, one row per matchup. `slurm/di
 
 The script also records the distance between the players from observation features 2 and 43, but in our extract these features are not informative, so the distance is not used in the results.
 
-### 6.5 Gradient-norm check
-
-`src/check_grad_norm.py` measures the effect of the joint gradient clip of §5.4. For each checkpoint it plays a self-play rollout with the training settings and computes GAE and the PPO losses exactly as in training, without taking the optimizer step. For each minibatch it reports:
-
-- the gradient norms of the actor and of the critic;
-- the **joint clip scale** $\min(1, 0.5 / \lVert g \rVert)$, which is what training does;
-- the **separate clip scale** $\min(1, 0.5 / \lVert g_{\text{actor}} \rVert)$, what the actor would get if it were clipped alone;
-- the **shrink factor**, separate scale divided by joint scale: how many times smaller the actor's step is because of the critic (1 = the critic does not matter).
-
-By default it runs on the checkpoints at 1M, 5M, 10M, 15M steps and the final one; results are written to `results/grad_norms.csv` (§8.8).
-
 ---
 
 ## 7. Experiments
 
-There are 3 comparisons: the 2 paper baselines, the reward functions and the bias–variance trade-off; then the stall fix and the environment ablations. All of these are done. Two experiments were added later, after the gradient-norm check and the best-response results, and are still running; the optional extensions were not run.
+There are 3 comparisons: the 2 paper baselines, the reward functions and the bias–variance trade-off; then the stall fix and the environment ablations. All of these are done. One experiment was added later, after the best-response results, and is still running; the optional extensions were not run.
 
 | Priority | Experiment | What changes | Runs | Question | Status |
 |---|---|---|---|---|---|
@@ -747,14 +723,13 @@ There are 3 comparisons: the 2 paper baselines, the reward functions and the bia
 | Core | Exploitability | best response against seed 1 of each variant (§6.3) | 5 targets × 2 learner seeds | Does head-to-head strength match low exploitability? | done (§8.4) |
 | Core | Bias and variance | GAE $\lambda$ 0 and 1 vs 0.95; $\gamma$ 0.99 vs 0.995, on R0 | 1 seed each | How do speed and stability change with more bias (TD) or more variance (Monte Carlo)? | done (§8.5) |
 | Secondary | Stall fix | `--adv-std-floor 0.1` on R0 and R1 | `r0_floor`, `r1_floor`, 5 seeds each | Does the fix reduce stalls on more than one seed, and does it change strength? | done (§8.6) |
-| Secondary | Separate gradient clipping | `--clip-separately` (actor and critic clipped each on its own norm), on R0 | `r0_sepclip`, 5 seeds | With a full-size actor step, does training become faster or more stable, and does strength change? | running (§8.8) |
 | Secondary | Best response with a floored learner | learner trained with `--adv-std-floor 0.1`; targets `r0_s1`, `r0_sched_s1`, `r1_s1` | [TODO: learner seeds] | Does the learner escape the draws more often, and is `r1_s1` exploitable after all? | running (§8.4) |
 | Secondary | Charge actions | `use_special_charge_action` on (9 actions, 88-dim observation), on R0 | 1 seed | Does the agent discover and use the specials? | done (§8.5, §8.7) |
 | Secondary | Action delay | `action_delay` 0 and 12 vs 8, on R0 | 1 seed each | With delay 0 does the game become reactive and brittle, as in the paper? | done (§8.5) |
 | Optional | Checkpoint pool (PFSP) | self-play against past snapshots | — | Does the pool reduce exploitability? | not run |
 | Optional | Timeout penalty | symmetric penalty, outside zero-sum | — | Does it discourage passivity, and what does the evaluation lose? | excluded (§9.1) |
 
-The bias–variance runs and the two game ablations are all in `slurm/ablations_array.sbatch` (6 runs: `r0_lam1_s1`, `r0_lam0_s1`, `r0_gamma099_s1`, `r0_charge_s1`, `r0_delay0_s1`, `r0_delay12_s1`); the reference is `r0_s1`. The stall fix is in `slurm/floor_array.sbatch`, separate clipping in `slurm/sepclip_array.sbatch`, the best responses in `slurm/br_array.sbatch` (with `FLOOR=0.1` for the floored learners), the diagnostics in `slurm/diagnostics_array.sbatch`. All runs use the same network, so differences can be attributed to the variable that changed.
+The bias–variance runs and the two game ablations are all in `slurm/ablations_array.sbatch` (6 runs: `r0_lam1_s1`, `r0_lam0_s1`, `r0_gamma099_s1`, `r0_charge_s1`, `r0_delay0_s1`, `r0_delay12_s1`); the reference is `r0_s1`. The stall fix is in `slurm/floor_array.sbatch`, the best responses in `slurm/br_array.sbatch` (with `FLOOR=0.1` for the floored learners), the diagnostics in `slurm/diagnostics_array.sbatch`. All runs use the same network, so differences can be attributed to the variable that changed.
 
 Two planned analyses have not been done: the `time` head-to-head pool (§6.1) and best responses against the floor runs. The best responses with a floored learner do not replace the second: they change the learner, not the target.
 
@@ -762,7 +737,7 @@ Two planned analyses have not been done: the `time` head-to-head pool (§6.1) an
 
 ## 8. Results
 
-The runs of the original plan are complete. The five comparison variants and the two stall-fix variants have **5 seeds each**, the six ablations one seed each, and the best responses **2 learner seeds** for each of the 5 targets. The final checkpoints have been evaluated against the fixed opponents, the `final` head-to-head pool is complete and the behaviour diagnostics have been run on seed 1 of each variant. The `time` head-to-head pool has not been played. Two experiments added later are running and their results are not included yet: separate gradient clipping (§8.8) and best responses with a floored learner (§8.4). The guiding question (§1) has an answer (§8.4), with one limit: exploitability is measured on one target seed per variant.
+The runs of the original plan are complete. The five comparison variants and the two stall-fix variants have **5 seeds each**, the six ablations one seed each, and the best responses **2 learner seeds** for each of the 5 targets. The final checkpoints have been evaluated against the fixed opponents, the `final` head-to-head pool is complete and the behaviour diagnostics have been run on seed 1 of each variant. The `time` head-to-head pool has not been played. One experiment added later is running and its results are not included yet: best responses with a floored learner (§8.4). The guiding question (§1) has an answer (§8.4), with one limit: exploitability is measured on one target seed per variant.
 
 ### 8.1 Against the fixed opponents
 
@@ -879,7 +854,6 @@ R0 and R1 with `--adv-std-floor 0.1` (§5.4), 5 seeds each, compared with the ba
 - **Total stalls disappear in the observed seeds**: 2 of 8 measurable runs end in a stall without the floor, 0 of 9 with it. Figure `report_stall.png` shows the mechanism on seed 5 of R0. Without the floor, `r0_s5` stalls twice: early (about 0.7–1M steps) it recovers, but from about 13.7M steps to the end all matches are timeouts and the advantage std stays at ~$10^{-3}$. This fits the role of the learning rate in §5.4: an early stall can be escaped, a late one, with the learning rate close to 0, cannot. With the floor, `r0_floor_s5` also goes through phases with up to 100% timeouts and drops in the (unfloored) advantage std down to ~$10^{-2}$, but it gets out every time; it ends with about 75% of its matches in timeout, so the floor prevents the lock-in, not the timeouts.
 - **The mean barely changes.** Only R0 against random has an interval that excludes zero; the other three are not distinguishable from zero. With 5 seeds per group the smallest detectable difference is about 0.3 in win rate, so no difference does not mean equivalence.
 - **The spread between seeds drops** in 3 cases out of 4, by a factor of 2–5 (with 5 seeds this is a weak estimate).
-- **The floor does shrink the actor's step in timeout phases.** The gradient-norm check (§8.8) sees it directly: at 15M steps and at the end, `r0_floor_s5` has an actor gradient norm of 0.014–0.021, against 0.30–0.36 for `r0_s5` and `r1_s3` in a stall.
 
 The floor does not raise the expected strength; it reduces the variance of training. This fits the bias–variance theme of §5.3: the problem it fixes is variance added by the normalization, not a wrong objective.
 
@@ -893,25 +867,7 @@ The floor does not raise the expected strength; it reduces the variance of train
 - **The charge actions are rarely used** (§8.5): at most about 2% of the steps, depending on the opponent.
 - **The agents without a stall keep matches decided**: `r0_s1` decides 99% of its self-play matches, `r0_floor_s1` 97% and `r1_floor_s1` 95%, with attack shares of 35%, 28% and 38%.
 
-Four facts link the stalls to optimization rather than to the reward: in a stall the reward is almost always zero and the advantage std falls to ~$10^{-3}$, so the normalization amplifies noise; the entropy bonus pushes the policy towards uniform; the learning rate going to 0 prevents escaping (§8.6); and the joint gradient clip, which slows the actor down while matches are decided, stops acting in a stall, so the actor takes full-size steps on that noise (§8.8). These are hypotheses consistent with the data, not proven.
-
-### 8.8 Gradient norms and separate clipping
-
-`results/grad_norms.csv` (§6.5): 4 runs, checkpoints at 1M, 5M, 10M, 15M steps and the final one. The table gives the **shrink factor**, i.e. how many times smaller the actor's step is because of the joint clip (1 = the clip does not touch the actor).
-
-| Run | 1M | 5M | 10M | 15M | final |
-|---|---|---|---|---|---|
-| `r0_s2` | 1 | 37 | 58 | 54 | 25 |
-| `r0_s5` | 1 | 29 | 20 | 1 | 1 |
-| `r1_s3` | 13 | 77 | 76 | 1 | 1 |
-| `r0_floor_s5` | 9 | 40 | 41 | 1 | 1 |
-
-- **While matches are decided, the actor learns 10–80 times more slowly than its own gradient would allow.** The actor's gradient norm is 0.2–0.4 at every checkpoint, below the 0.5 limit, so clipped alone it would never be reduced. The critic's is 5–39, and the joint clip brings the global norm down to 0.5: in these phases the actor's effective learning rate is between about 1/80 and 1/10 of the nominal one.
-- **In timeout phases the clip does not act.** Where the factor is 1 the critic's gradient is ~$10^{-3}$ and its loss ~$10^{-5}$ or less: almost every match is a timeout and the critic correctly predicts 0. This matches the stalls of §8.6: `r0_s5` at 15M and at the end (stall from about 13.7M) and at 1M (early stall at 0.7–1M). `r1_s3` behaves the same way at 15M and at the end, and `r0_s2` at 1M.
-- **In a stall, therefore, the actor takes full-size steps on noise.** The joint clip slows the actor while there is a real signal and stops acting exactly when the advantages are noise amplified by the normalization (§5.4): the actor's norm stays at 0.30–0.36 in the stalls of `r0_s5` and `r1_s3`. The floor is what removes this (§8.6), not the clip.
-- **Limits.** 4 runs and one rollout per checkpoint. This measures the size of the step, not its effect on learning.
-
-**Separate clipping** (`r0_sepclip_s1..5`, §5.4) tests whether a full-size actor step changes learning. It can only act while matches are decided, so the expected effect, if any, is on speed and strength, not on stalls. [TODO: results against the fixed opponents (same format as §8.1 and §8.6, compared with `r0_s*` and `r0_floor_s*`), final stalls, and the gradient-norm check on at least one `r0_sepclip` run.]
+Three facts link the stalls to optimization rather than to the reward: in a stall the reward is almost always zero and the advantage std falls to ~$10^{-3}$, so the normalization amplifies noise; the entropy bonus pushes the policy towards uniform; and the learning rate going to 0 prevents escaping (§8.6). These are hypotheses consistent with the data, not proven.
 
 ---
 
@@ -921,7 +877,7 @@ Four facts link the stalls to optimization rather than to the reward: in a stall
 
 The results show two different phenomena, which are easy to confuse because both end in timeouts:
 
-- **stalls in self-play** (§8.7): no match is decided, although the agents attack a lot. They are linked to optimization (§5.4, §8.8), and the advantage floor removes them in the observed seeds (§8.6);
+- **stalls in self-play** (§8.7): no match is decided, although the agents attack a lot. They are linked to optimization (§5.4), and the advantage floor removes them in the observed seeds (§8.6);
 - **reactivity against passive opponents** (§8.2): the final agents rarely start the fight against noop and back, even when they have learned to do it earlier in training. The floor does not change this (R0 floor 10% against noop, R1 floor 2%).
 
 Our hypothesis for the second (§2.4) is that with the default delay attacks must be predicted, while whiffed attacks can always be punished on reaction: whiffing is costly and waiting is not, so against an opponent that is itself reactive the best response is to wait. The delay-12 run (§8.5), where whiffing is cheaper and the agent does take the initiative, is consistent with it; the hypothesis that mutual inactivity is a fixed point of symmetric self-play is not verified.
@@ -938,7 +894,6 @@ They support that:
 - R2 and R3 are highly exploitable, even though they are stalled in self-play;
 - $\lambda = 0$ does not learn;
 - head-to-head rank only partly predicts exploitability;
-- the joint gradient clip shrinks the actor's step 10–80 times while matches are decided, and not during stalls (4 runs, §8.8).
 
 They do not support that:
 
@@ -946,13 +901,11 @@ They do not support that:
 - the floor improves mean strength;
 - the charge actions are used strategically;
 - the variants are equivalent (5 seeds cannot detect differences below about 0.3);
-- the joint clip slows down learning: the step is smaller, but whether a larger one helps is the question of `r0_sepclip`, still open (§8.8).
 
 ### 9.3 Limits
 
 - The ablations and the diagnostics use **one seed**; exploitability uses **one target seed** per variant and **two learner seeds**.
 - The best response is a lower bound, and the learners themselves can stall; their training curves overestimate the final win rate (§6.3, §8.4).
 - The distance between the players was not measured (§6.4).
-- The gradient-norm check covers 4 runs with one rollout per checkpoint (§8.8).
 - Not done: the `time` head-to-head pool, PFSP, best responses against the floor runs.
-- Results not yet available: separate clipping (`r0_sepclip`, §8.8) and best responses with a floored learner (§8.4).
+- Results not yet available: best responses with a floored learner (§8.4).

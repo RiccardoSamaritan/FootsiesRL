@@ -58,7 +58,6 @@ Output in `runs/<run-name>/`: `config.json`, `log.csv`, `ckpt_<steps>.pt`, `fina
 | `--reward r0\|r1\|r2\|r3` | terminal ±10 / dense guard-break reward / potential shaping on the guard / win scaled by game length |
 | `--ent-decay` | entropy 0.1 → 0 ("PPO Sched."), default fixed 0.025 |
 | `--adv-std-floor X` | normalize advantages by max(std, X) (stall fix) |
-| `--clip-separately` | clip actor and critic gradients separately |
 | `--gae-lambda`, `--gamma`, `--lr`, `--ent-coef` | PPO hyperparameters (0.95, 0.995, 1e-4, 0.025) |
 | `--special-charge`, `--action-delay N` | game options (charge actions, delay in frames, default 8) |
 | `--num-envs`, `--port`, `--resume`, `--wandb` | parallel games (≥ 2), server port (one per run), continue a stopped run, W&B logging |

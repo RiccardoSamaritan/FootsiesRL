@@ -30,11 +30,6 @@ class PPOConfig:
     # the raw advantages have std ~1e-3 and dividing by it turns noise into full-size updates.
     # 0 = classic normalization (the setting of runs r0-r2).
     adv_std_floor: float = 0.0
-    # Clip the gradient norm of actor and critic separately (each to max_grad_norm) instead of
-    # jointly. With returns on a +-10 scale the critic's gradient is 10-100x the actor's, so the
-    # joint clip shrinks the actor's step by the same factor (measured with check_grad_norm.py).
-    # False = classic joint clipping (the setting of all runs before r0_sepclip).
-    clip_separately: bool = False
     clip_vloss: bool = False  # value clipping is off: returns are on a +-10 scale
     hidden: int = 256
 
@@ -151,11 +146,7 @@ def ppo_update(agent, optimizer, batch, cfg: PPOConfig, ent_coef: float):
 
             optimizer.zero_grad()
             loss.backward()
-            if cfg.clip_separately:
-                nn.utils.clip_grad_norm_(agent.actor.parameters(), cfg.max_grad_norm)
-                nn.utils.clip_grad_norm_(agent.critic.parameters(), cfg.max_grad_norm)
-            else:
-                nn.utils.clip_grad_norm_(agent.parameters(), cfg.max_grad_norm)
+            nn.utils.clip_grad_norm_(agent.parameters(), cfg.max_grad_norm)
             optimizer.step()
 
             with torch.no_grad():
