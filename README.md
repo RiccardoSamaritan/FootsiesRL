@@ -1,7 +1,7 @@
 # FootsiesRL
 
 PPO agents for the fighting game **Footsies** ([FootsiesGym](https://pypi.org/project/footsies-gym/)),
-trained in self-play with our own PyTorch implementation. The project compares training rewards
+trained in self-play. The project compares training rewards
 and asks whether an agent that beats simple opponents is also hard to exploit.
 
 ## Installation
@@ -87,10 +87,6 @@ uv run python src/plot_paper_figures.py
 uv run python src/plot_diagnostics.py
 uv run python src/plot_local.py
 ```
-
-Figures go to `results/figures/`. `plot_results.py`, `plot_report.py` and the best-response
-figure read the training logs in `runs/` and `runs_br/`, which are not in git: copy them from
-the training machine first ([`RSYNC.md`](RSYNC.md)).
 
 **Cluster (SLURM)**: every experiment has a script in `slurm/` with its usage in the header,
 e.g. `sbatch slurm/seeds_array.sbatch`. Written for Orfeo (partition `THIN`, CPU only): adapt
