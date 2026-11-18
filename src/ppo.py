@@ -1,8 +1,6 @@
-"""PPO (clipped surrogate) with GAE, written from scratch in PyTorch.
+# ppo.py
+# Our implementation of PPO (clipped version) with GAE, written from scratch in PyTorch.
 
-Algorithm only: nothing here knows about Footsies. Every place where bias or
-variance enters the estimator is marked with a "BIAS/VARIANCE" comment.
-"""
 from dataclasses import asdict, dataclass
 
 import numpy as np
@@ -13,7 +11,9 @@ from torch.distributions import Categorical
 
 @dataclass
 class PPOConfig:
-    # hyperparameters of the FootsiesGym paper (Table 3)
+    """
+    hyperparameters are taken from the FootsiesGym paper (Table 3)
+    """
     gamma: float = 0.995
     gae_lambda: float = 0.95
     clip_coef: float = 0.3
@@ -21,16 +21,17 @@ class PPOConfig:
     max_grad_norm: float = 0.5
     num_epochs: int = 8
     num_minibatches: int = 8
-    lr: float = 1e-4  # linearly annealed to 0
+    lr: float = 1e-4  # goes down linearly to 0 during training
     anneal_lr: bool = True
-    ent_coef: float = 0.025  # fixed value, or start value of the decay
-    ent_decay: bool = False  # if True: ent_coef -> 0 linearly
+    ent_coef: float = 0.025  # fixed value, or starting value if ent_decay is True
+    ent_decay: bool = False  # if True the entropy coefficient goes linearly to 0
     norm_adv: bool = True
-    # Lower bound for the std used to normalize advantages. When rewards are ~0 (a stalemate)
-    # the raw advantages have std ~1e-3 and dividing by it turns noise into full-size updates.
-    # 0 = classic normalization (the setting of runs r0-r2).
+    # minimum std used when normalizing the advantages (my fix for the stalls).
+    # When all games end in timeout the reward is ~0, the advantages have std ~1e-3
+    # and dividing by it turns pure noise into full-size updates.
+    # 0 = normal normalization (what the first runs used)
     adv_std_floor: float = 0.0
-    clip_vloss: bool = False  # value clipping is off: returns are on a +-10 scale
+    clip_vloss: bool = False  # no value clipping: returns are on a +-10 scale
     hidden: int = 256
 
 
@@ -41,15 +42,20 @@ def _layer(layer, std=np.sqrt(2), bias=0.0):
 
 
 class Agent(nn.Module):
-    """Shared-feature-free actor-critic: two separate MLPs 2x256 ReLU."""
+    """
+    actor-critic with two separate networks (no shared layers), both MLP 2x256 with ReLU
+    """
 
     def __init__(self, obs_dim: int, n_actions: int, hidden: int = 256):
         super().__init__()
+        # critic: outputs V(s)
         self.critic = nn.Sequential(
             _layer(nn.Linear(obs_dim, hidden)), nn.ReLU(),
             _layer(nn.Linear(hidden, hidden)), nn.ReLU(),
             _layer(nn.Linear(hidden, 1), std=1.0),
         )
+        # actor: outputs the logits of the actions (small std on the last layer,
+        # so at the beginning the policy is close to uniform)
         self.actor = nn.Sequential(
             _layer(nn.Linear(obs_dim, hidden)), nn.ReLU(),
             _layer(nn.Linear(hidden, hidden)), nn.ReLU(),
@@ -60,6 +66,8 @@ class Agent(nn.Module):
         return self.critic(obs).squeeze(-1)
 
     def get_action_and_value(self, obs, action=None):
+        # if no action is given we sample one from the policy, otherwise we just
+        # compute log-prob and entropy of the given action (used in the update)
         dist = Categorical(logits=self.actor(obs))
         if action is None:
             action = dist.sample()
@@ -95,42 +103,43 @@ def compute_gae(rewards, values, terminated, truncated, gamma, lam):
     adv = torch.zeros_like(rewards)
     last = torch.zeros_like(rewards[0])
     for t in reversed(range(T)):
-        delta = rewards[t] + gamma * next_values[t] - values[t]
+        delta = rewards[t] + gamma * next_values[t] - values[t]  # TD error
         last = delta + gamma * lam * (1.0 - done[t]) * last
         adv[t] = last
-    returns = adv + values[:-1]
+    returns = adv + values[:-1]  # targets for the critic
     return adv, returns
 
 
 def ppo_update(agent, optimizer, batch, cfg: PPOConfig, ent_coef: float):
-    """Several epochs of minibatch SGD on one rollout. Returns diagnostics.
-
-    batch: dict of flat tensors obs, actions, logprobs, advantages, returns, values.
+    """
+    PPO update: several epochs of minibatch SGD on the same rollout.
+    batch is a dict of flat tensors: obs, actions, logprobs, advantages, returns, values.
+    Returns some statistics for the log.
     """
     n = batch["obs"].shape[0]
     mb_size = n // cfg.num_minibatches
     stats = {k: [] for k in ["pg_loss", "v_loss", "entropy", "approx_kl", "clipfrac"]}
 
     for _ in range(cfg.num_epochs):
-        # BIAS/VARIANCE: reusing the same batch for several epochs makes the
-        # samples off-policy; the importance ratio corrects the expectation,
-        # the clipping bounds its variance at the cost of a biased surrogate.
         perm = torch.randperm(n, device=batch["obs"].device)
         for start in range(0, n - mb_size + 1, mb_size):
             idx = perm[start:start + mb_size]
             _, new_logp, entropy, new_v = agent.get_action_and_value(
                 batch["obs"][idx], batch["actions"][idx])
             log_ratio = new_logp - batch["logprobs"][idx]
-            ratio = log_ratio.exp()
+            ratio = log_ratio.exp()  # pi_new(a|s) / pi_old(a|s)
 
+            # normalize the advantages in the minibatch (with the floor on the std)
             adv = batch["advantages"][idx]
             if cfg.norm_adv:
                 adv = (adv - adv.mean()) / (adv.std().clamp(min=cfg.adv_std_floor) + 1e-8)
 
+            # clipped surrogate loss
             pg1 = -adv * ratio
             pg2 = -adv * torch.clamp(ratio, 1 - cfg.clip_coef, 1 + cfg.clip_coef)
             pg_loss = torch.max(pg1, pg2).mean()
 
+            # value loss (MSE), optionally clipped
             ret = batch["returns"][idx]
             if cfg.clip_vloss:
                 v_old = batch["values"][idx]
@@ -139,8 +148,6 @@ def ppo_update(agent, optimizer, batch, cfg: PPOConfig, ent_coef: float):
             else:
                 v_loss = 0.5 * ((new_v - ret) ** 2).mean()
 
-            # BIAS/VARIANCE: the entropy bonus deliberately biases the policy
-            # gradient towards exploration; it vanishes if ent_decay is on.
             ent = entropy.mean()
             loss = pg_loss + cfg.vf_coef * v_loss - ent_coef * ent
 
@@ -157,8 +164,8 @@ def ppo_update(agent, optimizer, batch, cfg: PPOConfig, ent_coef: float):
                 stats["clipfrac"].append(((ratio - 1).abs() > cfg.clip_coef).float().mean().item())
 
     out = {k: float(np.mean(v)) for k, v in stats.items()}
-    # explained variance of the critic on the whole batch: 1 = perfect,
-    # <=0 = useless. Diagnostic for the critic bias.
+    # explained variance of the critic on the whole batch:
+    # 1 = perfect, <= 0 = useless. I use it to check how biased the critic is.
     y_pred, y_true = batch["values"].cpu().numpy(), batch["returns"].cpu().numpy()
     var_y = np.var(y_true)
     out["explained_var"] = float("nan") if var_y == 0 else float(1 - np.var(y_true - y_pred) / var_y)
@@ -168,9 +175,12 @@ def ppo_update(agent, optimizer, batch, cfg: PPOConfig, ent_coef: float):
 
 
 def save_agent(path, agent, cfg: PPOConfig, obs_dim, n_actions, steps, env_config=None, optimizer=None):
-    """env_config: game settings of the training env (action_delay, use_special_charge_action),
-    so that evaluation can build the same env. Older checkpoints have none (default settings).
-    optimizer: if given, its state is saved too, so that training can be resumed exactly."""
+    """
+    Saves a checkpoint.
+    env_config = game settings used in training (action_delay, use_special_charge_action),
+    so the evaluation can create the same env. Old checkpoints don't have it (default settings).
+    If the optimizer is passed, its state is saved too, so training can be resumed exactly.
+    """
     data = {"agent": agent.state_dict(), "cfg": asdict(cfg), "obs_dim": obs_dim,
             "n_actions": n_actions, "steps": steps, "env_config": dict(env_config or {})}
     if optimizer is not None:
@@ -179,11 +189,14 @@ def save_agent(path, agent, cfg: PPOConfig, obs_dim, n_actions, steps, env_confi
 
 
 def resume_state(run_dir, agent, optimizer, steps_per_update, log_path):
-    """Load the latest ckpt_*.pt of run_dir into agent (and optimizer, if its state was saved),
-    cut log.csv after that checkpoint and return (steps, first update to run, log fieldnames).
-
-    Checkpoints written before resuming existed hold no optimizer state: Adam then restarts
-    with empty moment estimates, a small deviation from an uninterrupted run (printed)."""
+    """
+    Used to continue a run that was stopped (e.g. by the 2h limit on Orfeo).
+    Loads the last ckpt_*.pt of run_dir into the agent (and the optimizer, if saved),
+    removes from log.csv the rows after that checkpoint and returns
+    (steps, first update to run, log fieldnames).
+    Checkpoints saved before I added this have no optimizer state: in that case Adam
+    restarts from scratch, which is a small difference from an uninterrupted run (it is printed).
+    """
     import csv
     import glob
     import os
@@ -202,6 +215,7 @@ def resume_state(run_dir, agent, optimizer, steps_per_update, log_path):
     if steps % steps_per_update:
         raise SystemExit(f"--resume: checkpoint at {steps} steps is not a multiple of {steps_per_update}")
     start_update = steps // steps_per_update + 1
+    # keep only the log rows before the checkpoint
     with open(log_path, newline="") as f:
         reader = csv.DictReader(f)
         fields = reader.fieldnames
@@ -215,6 +229,9 @@ def resume_state(run_dir, agent, optimizer, steps_per_update, log_path):
 
 
 def load_agent(path, device="cpu"):
+    """
+    rebuilds the network from a checkpoint
+    """
     ck = torch.load(path, map_location=device)
     agent = Agent(ck["obs_dim"], ck["n_actions"], ck["cfg"]["hidden"]).to(device)
     agent.load_state_dict(ck["agent"])
