@@ -176,11 +176,51 @@ def ppo_update(agent, optimizer, batch, cfg: PPOConfig, ent_coef: float):
     return out
 
 
-def save_agent(path, agent, cfg: PPOConfig, obs_dim, n_actions, steps, env_config=None):
+def save_agent(path, agent, cfg: PPOConfig, obs_dim, n_actions, steps, env_config=None, optimizer=None):
     """env_config: game settings of the training env (action_delay, use_special_charge_action),
-    so that evaluation can build the same env. Older checkpoints have none (default settings)."""
-    torch.save({"agent": agent.state_dict(), "cfg": asdict(cfg), "obs_dim": obs_dim,
-                "n_actions": n_actions, "steps": steps, "env_config": dict(env_config or {})}, path)
+    so that evaluation can build the same env. Older checkpoints have none (default settings).
+    optimizer: if given, its state is saved too, so that training can be resumed exactly."""
+    data = {"agent": agent.state_dict(), "cfg": asdict(cfg), "obs_dim": obs_dim,
+            "n_actions": n_actions, "steps": steps, "env_config": dict(env_config or {})}
+    if optimizer is not None:
+        data["optimizer"] = optimizer.state_dict()
+    torch.save(data, path)
+
+
+def resume_state(run_dir, agent, optimizer, steps_per_update, log_path):
+    """Load the latest ckpt_*.pt of run_dir into agent (and optimizer, if its state was saved),
+    cut log.csv after that checkpoint and return (steps, first update to run, log fieldnames).
+
+    Checkpoints written before resuming existed hold no optimizer state: Adam then restarts
+    with empty moment estimates, a small deviation from an uninterrupted run (printed)."""
+    import csv
+    import glob
+    import os
+    cks = sorted(glob.glob(os.path.join(run_dir, "ckpt_*.pt")),
+                 key=lambda p: int(os.path.basename(p)[5:-3]))
+    if not cks:
+        raise SystemExit(f"--resume: no checkpoint in {run_dir}")
+    ck = torch.load(cks[-1], map_location="cpu")
+    agent.load_state_dict(ck["agent"])
+    if "optimizer" in ck:
+        optimizer.load_state_dict(ck["optimizer"])
+        note = "with optimizer state"
+    else:
+        note = "WITHOUT optimizer state (older checkpoint): Adam restarts"
+    steps = int(ck["steps"])
+    if steps % steps_per_update:
+        raise SystemExit(f"--resume: checkpoint at {steps} steps is not a multiple of {steps_per_update}")
+    start_update = steps // steps_per_update + 1
+    with open(log_path, newline="") as f:
+        reader = csv.DictReader(f)
+        fields = reader.fieldnames
+        kept = [r for r in reader if int(r["update"]) < start_update]
+    with open(log_path, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=fields)
+        w.writeheader()
+        w.writerows(kept)
+    print(f"resuming from {cks[-1]} ({steps} steps, update {start_update}) {note}", flush=True)
+    return steps, start_update, fields
 
 
 def load_agent(path, device="cpu"):

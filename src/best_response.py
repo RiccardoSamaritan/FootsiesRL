@@ -39,7 +39,7 @@ import numpy as np
 import torch
 
 from env import ENV_CONFIG, FootsiesVecEnv
-from ppo import Agent, PPOConfig, compute_gae, ppo_update, save_agent
+from ppo import Agent, PPOConfig, compute_gae, ppo_update, resume_state, save_agent
 from policy import load_policy_opponent
 
 RESULTS = Path(__file__).resolve().parent.parent / "results"
@@ -66,6 +66,8 @@ def parse_args():
     p.add_argument("--checkpoint-every", type=int, default=5_000_000, help="steps")
     p.add_argument("--eval-games", type=int, default=500, help="final games against the target (0 = skip)")
     p.add_argument("--overwrite", action="store_true")
+    p.add_argument("--resume", action="store_true",
+                   help="continue an interrupted run from its latest checkpoint (same arguments as the original run)")
     p.add_argument("--eval-only", action="store_true",
                    help="skip training and only run the final evaluation of an existing final.pt")
     return p.parse_args()
@@ -118,7 +120,12 @@ def main():
         steps = int(torch.load(final_path, map_location="cpu")["steps"])
         final_evaluation(final_path, args.target, args.eval_games, args.seed, run_name, steps)
         return
-    if os.path.exists(os.path.join(run_dir, "log.csv")) and not args.overwrite:
+    if args.resume:
+        if not os.path.exists(os.path.join(run_dir, "log.csv")):
+            sys.exit(f"--resume: {run_dir} has no log.csv")
+        if os.path.exists(os.path.join(run_dir, "final.pt")):
+            sys.exit(f"--resume: {run_dir} already has final.pt: use --eval-only")
+    elif os.path.exists(os.path.join(run_dir, "log.csv")) and not args.overwrite:
         sys.exit(f"{run_dir} already has a log.csv: choose another --run-name or pass --overwrite")
     os.makedirs(run_dir, exist_ok=True)
     assert args.num_envs % 2 == 0, "--num-envs must be even (half the games per side)"
@@ -157,14 +164,21 @@ def main():
     trunc_buf = torch.zeros((T, N), dtype=torch.bool, device=device)
 
     num_updates = max(args.total_steps // (N * T), 1)
-    log_file, writer = open(os.path.join(run_dir, "log.csv"), "w", newline=""), None
-    next_ckpt = args.checkpoint_every
-    steps = 0
+    log_path = os.path.join(run_dir, "log.csv")
+    start_update, steps = 1, 0
+    if args.resume:
+        steps, start_update, fields = resume_state(run_dir, agent, optimizer, N * T, log_path)
+        log_file = open(log_path, "a", newline="")
+        writer = csv.DictWriter(log_file, fieldnames=fields)
+        torch.manual_seed(args.seed + start_update)  # do not replay the random stream of the first part
+    else:
+        log_file, writer = open(log_path, "w", newline=""), None
+    next_ckpt = (steps // args.checkpoint_every + 1) * args.checkpoint_every
     t_start = time.time()
     final_path = os.path.join(run_dir, "final.pt")
     try:
         obs = env.reset()
-        for update in range(1, num_updates + 1):
+        for update in range(start_update, num_updates + 1):
             frac = 1.0 - (update - 1) / num_updates
             optimizer.param_groups[0]["lr"] = frac * cfg.lr
             outcomes, lengths = [], []
@@ -219,7 +233,7 @@ def main():
                       f"ev {stats['explained_var']:.2f}", flush=True)
             if steps >= next_ckpt:
                 save_agent(os.path.join(run_dir, f"ckpt_{steps}.pt"), agent, cfg, env.obs_dim,
-                           env.n_actions, steps, game_cfg)
+                           env.n_actions, steps, game_cfg, optimizer)
                 next_ckpt += args.checkpoint_every
         save_agent(final_path, agent, cfg, env.obs_dim, env.n_actions, steps, game_cfg)
     finally:

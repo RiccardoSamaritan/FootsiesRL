@@ -10,6 +10,8 @@
 # A second learner seed for every target:  SEED=2 sbatch slurm/br_array.sbatch
 # With the advantage-std floor (run name br_<target>_b<seed>_floor):
 #   FLOOR=0.1 SEED=1 sbatch --array=0-2 slurm/br_array.sbatch
+# Continue tasks stopped by the time limit from their latest checkpoint (same FLOOR and SEED):
+#   RESUME=1 FLOOR=0.1 SEED=2 sbatch --array=0-2 slurm/br_array.sbatch
 # If a task hits the time limit after training, evaluate its final.pt only:
 #   uv run python src/best_response.py --target runs/r0_s1/final.pt --eval-only
 #SBATCH --job-name=br
@@ -35,4 +37,4 @@ export MKL_NUM_THREADS=$OMP_NUM_THREADS
 PORT=$((46001 + 10 * SLURM_ARRAY_TASK_ID + SLURM_JOB_ID % 1000))
 
 uv run python src/best_response.py --target "runs/$TARGET/final.pt" --seed "$SEED" --port "$PORT" \
-  --total-steps 20000000 --eval-games 500 --adv-std-floor "$FLOOR"
+  --total-steps 20000000 --eval-games 500 --adv-std-floor "$FLOOR" ${RESUME:+--resume}

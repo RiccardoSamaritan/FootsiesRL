@@ -6,6 +6,8 @@
 # Same 20M steps and hyperparameters as the comparison runs: compare with r0_s* and r0_floor_s*.
 #   sbatch slurm/sepclip_array.sbatch
 # Rerun some tasks only:  sbatch --array=3 slurm/sepclip_array.sbatch
+# Continue tasks stopped by the time limit from their latest checkpoint:
+#   RESUME=1 sbatch --array=1,4 slurm/sepclip_array.sbatch
 #SBATCH --job-name=sepclip
 #SBATCH --partition=THIN
 ##SBATCH --account=<your_account>   # TODO if required
@@ -36,4 +38,4 @@ export MKL_NUM_THREADS=$OMP_NUM_THREADS
 # unique port per task: tasks of the array can share a node
 PORT=$((45001 + 10 * SLURM_ARRAY_TASK_ID + SLURM_JOB_ID % 1000))
 
-uv run python src/train.py --run-name "$NAME" --port "$PORT" --total-steps 20000000 $ARGS
+uv run python src/train.py --run-name "$NAME" --port "$PORT" --total-steps 20000000 $ARGS ${RESUME:+--resume}
