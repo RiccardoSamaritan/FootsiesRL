@@ -1,41 +1,38 @@
 # FootsiesRL
-A Reinforcement Learning approach to Footsies game
 
-How to install the training environment, using [uv](https://docs.astral.sh/uv/):
+PPO agents for the fighting game **Footsies** ([FootsiesGym](https://pypi.org/project/footsies-gym/)),
+trained in self-play with our own PyTorch implementation. The project compares training rewards
+and asks whether an agent that beats simple opponents is also hard to exploit.
 
-### macOS/Linux
+## Installation
 
-```
-# Install uv (once). On macOS:
-brew install uv
-# or, on macOS/Linux:
-curl -LsSf https://astral.sh/uv/install.sh | sh
+Requires [uv](https://docs.astral.sh/uv/) and macOS or Linux (on Windows see below). Python 3.12
+and all packages are pinned by `.python-version` and `uv.lock`.
 
-# Create .venv and install the locked dependencies (pyproject.toml + uv.lock)
-uv sync
+### macOS / Linux
 
-# Run any script inside the environment, without activating it
-uv run python test.py
-uv run python src/train.py
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh   # or: brew install uv
+uv sync                                           # creates .venv
+uv run python test.py                             # smoke test: prints the observation shapes
 ```
 
-> **Note**: the project now uses uv only; `requirements.txt` and pip are gone. After pulling, install uv (see above) and run `uv sync` to recreate `.venv` (delete your old `.venv` first if it was created with `python3 -m venv`).
-> `uv.lock` pins the exact versions of all packages so everyone gets the same environment: do not edit it by hand and always commit it.
+`visual_test.py` shows random agents in the windowed game (macOS).
 
-To add a dependency use `uv add <package>`; commit both `pyproject.toml` and `uv.lock`.
+### Windows (WSL2)
 
-### Windows
+FootsiesGym only ships macOS and Linux game binaries, so the project does not run natively on
+Windows. Use WSL2 (Windows Subsystem for Linux), which gives you a real Linux environment:
 
-FootsiesGym only ships macOS and Linux game binaries, so the project does not run natively on Windows. Use WSL2 (Windows Subsystem for Linux), which gives you a real Linux environment:
-
-```
-# In PowerShell (as administrator), once; then reboot
+```powershell
+# in PowerShell (as administrator), once; then reboot
 wsl --install -d Ubuntu
 ```
 
-Then open the Ubuntu terminal and work **inside Linux**, not in `/mnt/c/...` (the Windows filesystem is slow and breaks file permissions):
+Then open the Ubuntu terminal and work **inside Linux**, not in `/mnt/c/...` (the Windows
+filesystem is slow and breaks file permissions):
 
-```
+```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh   # then reopen the terminal
 git clone <repo-url> ~/FootsiesRL
 cd ~/FootsiesRL
@@ -43,8 +40,76 @@ uv sync
 uv run python test.py
 ```
 
-The headless environment (`test.py` and training) works this way. `visual_test.py` is written for the macOS windowed build and is not expected to work on WSL.
+## Usage
 
-**IMPORTANT**: both in `test.py` and `visual_test.py` you have to set the correct platform depending on your OS. Use `"mac"` if you are on MacOS, or `"linux"` if you are on Linux. **Native Windows is not supported** (use WSL2 and `"linux"`, see above).
-~~This disclaimer is for Giovanni, who will for sure text me and Alessio on Whatsapp because the code is not working on his machine (skill issue).~~
-I don't need to be spoonfed.
+Run everything from the repository root.
+
+**Train**
+
+```bash
+uv run python src/train.py --run-name smoke --total-steps 200000 --num-envs 8    # a few minutes
+uv run python src/train.py --run-name r0_s1 --reward r0 --seed 1 --total-steps 20000000
+```
+
+Output in `runs/<run-name>/`: `config.json`, `log.csv`, `ckpt_<steps>.pt`, `final.pt`.
+
+| Option | Meaning |
+|---|---|
+| `--reward r0\|r1\|r2\|r3` | terminal ±10 / dense guard-break reward / potential shaping on the guard / win scaled by game length |
+| `--ent-decay` | entropy 0.1 → 0 ("PPO Sched."), default fixed 0.025 |
+| `--adv-std-floor X` | normalize advantages by max(std, X) (stall fix) |
+| `--clip-separately` | clip actor and critic gradients separately |
+| `--gae-lambda`, `--gamma`, `--lr`, `--ent-coef` | PPO hyperparameters (0.95, 0.995, 1e-4, 0.025) |
+| `--special-charge`, `--action-delay N` | game options (charge actions, delay in frames, default 8) |
+| `--num-envs`, `--port`, `--resume`, `--wandb` | parallel games (≥ 2), server port (one per run), continue a stopped run, W&B logging |
+
+Full list: `uv run python src/train.py --help`.
+
+**Evaluate and analyse**
+
+```bash
+uv run python src/evaluate.py --agent runs/r0_s1/final.pt --games 100            # vs random, noop, back
+uv run python src/evaluate.py --agent runs/r0_s1/final.pt --opponents footsies_bot
+uv run python src/head_to_head.py --agents runs/r0_s1/final.pt runs/r1_s1/final.pt --label test
+uv run python src/best_response.py --target runs/r0_s1/final.pt --total-steps 20000000
+uv run python src/diagnostics.py runs/r0_s1/final.pt
+```
+
+Results are appended to `results/` (`eval_<run>.csv`, `h2h_*.csv`, `br_<target>.csv`,
+`diag_<run>.csv`). Actions are always sampled from the policy, never argmax.
+
+**Figures**
+
+```bash
+uv run python src/plot_results.py && uv run python src/make_tables.py
+uv run python src/plot_report.py
+uv run python src/plot_paper_figures.py
+uv run python src/plot_diagnostics.py
+uv run python src/plot_local.py
+```
+
+Figures go to `results/figures/`. `plot_results.py`, `plot_report.py` and the best-response
+figure read the training logs in `runs/` and `runs_br/`, which are not in git: copy them from
+the training machine first ([`RSYNC.md`](RSYNC.md)).
+
+**Cluster (SLURM)**: every experiment has a script in `slurm/` with its usage in the header,
+e.g. `sbatch slurm/seeds_array.sbatch`. Written for Orfeo (partition `THIN`, CPU only): adapt
+partition and account.
+
+## Repository
+
+```text
+src/        PPO, training, rewards, evaluation, figures (details: src/README.md)
+slurm/      sbatch scripts of all experiments
+results/    evaluation CSVs, tables, figures (details: results/README.md)
+docs/       full report (footsies.md)
+test.py, visual_test.py   environment checks
+```
+
+## Authors
+
+Alessio Martucci
+
+Giovanni Oro
+
+Riccardo Samaritan
