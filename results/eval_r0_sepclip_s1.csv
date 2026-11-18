@@ -1,0 +1,14 @@
+eval_id,timestamp,label,agent,run,steps,opponent,games,wins,draws,losses,win_rate,ci_low,ci_high,seed
+20261118-112459-62d4,2026-11-18T11:24:59,r0_sepclip_s1-5M,runs/r0_sepclip_s1/ckpt_5001216.pt,r0_sepclip_s1,5001216,random,100,83,0,17,0.83,0.7445,0.8911,0
+20261118-112459-62d4,2026-11-18T11:24:59,r0_sepclip_s1-5M,runs/r0_sepclip_s1/ckpt_5001216.pt,r0_sepclip_s1,5001216,noop,100,2,98,0,0.02,0.0055,0.07,0
+20261118-112459-62d4,2026-11-18T11:24:59,r0_sepclip_s1-5M,runs/r0_sepclip_s1/ckpt_5001216.pt,r0_sepclip_s1,5001216,back,100,0,100,0,0.0,0.0,0.037,0
+20261118-112642-bc73,2026-11-18T11:26:42,r0_sepclip_s1-10M,runs/r0_sepclip_s1/ckpt_10002432.pt,r0_sepclip_s1,10002432,random,100,87,0,13,0.87,0.7902,0.9224,0
+20261118-112642-bc73,2026-11-18T11:26:42,r0_sepclip_s1-10M,runs/r0_sepclip_s1/ckpt_10002432.pt,r0_sepclip_s1,10002432,noop,100,66,34,0,0.66,0.5628,0.7454,0
+20261118-112642-bc73,2026-11-18T11:26:42,r0_sepclip_s1-10M,runs/r0_sepclip_s1/ckpt_10002432.pt,r0_sepclip_s1,10002432,back,100,0,100,0,0.0,0.0,0.037,0
+20261118-112851-5631,2026-11-18T11:28:51,r0_sepclip_s1-15M,runs/r0_sepclip_s1/ckpt_15000576.pt,r0_sepclip_s1,15000576,random,100,90,0,10,0.9,0.8256,0.9448,0
+20261118-112851-5631,2026-11-18T11:28:51,r0_sepclip_s1-15M,runs/r0_sepclip_s1/ckpt_15000576.pt,r0_sepclip_s1,15000576,noop,100,0,100,0,0.0,0.0,0.037,0
+20261118-112851-5631,2026-11-18T11:28:51,r0_sepclip_s1-15M,runs/r0_sepclip_s1/ckpt_15000576.pt,r0_sepclip_s1,15000576,back,100,0,100,0,0.0,0.0,0.037,0
+20261118-113101-a574,2026-11-18T11:31:01,r0_sepclip_s1-final,runs/r0_sepclip_s1/final.pt,r0_sepclip_s1,19998720,random,100,89,2,9,0.89,0.8137,0.9375,0
+20261118-113101-a574,2026-11-18T11:31:01,r0_sepclip_s1-final,runs/r0_sepclip_s1/final.pt,r0_sepclip_s1,19998720,noop,100,0,100,0,0.0,0.0,0.037,0
+20261118-113101-a574,2026-11-18T11:31:01,r0_sepclip_s1-final,runs/r0_sepclip_s1/final.pt,r0_sepclip_s1,19998720,back,100,0,100,0,0.0,0.0,0.037,0
+20261118-113352-750b,2026-11-18T11:33:52,r0_sepclip_s1-final-bot,runs/r0_sepclip_s1/final.pt,r0_sepclip_s1,19998720,footsies_bot,100,96,0,4,0.96,0.9016,0.9843,0
