@@ -618,13 +618,12 @@ For each update:
 | `slurm/floor_array.sbatch` | 9: `r0_floor_s1..5`, `r1_floor_s2..5` (plus the earlier `r1_floor_s1`) | done |
 | `slurm/ablations_array.sbatch` | 6: λ 0 and 1, γ 0.99, charge, delay 0 and 12 (all seed 1) | done |
 | `slurm/br_array.sbatch` | 5 best responses (seed 1 of R0, Sched., R1, R2, R3), plus 5 with `SEED=2` | done |
-| `slurm/br_array.sbatch` with `FLOOR=0.1` | best responses with a floored learner (`br_<target>_b<seed>_floor`), targets R0, Sched., R1 (tasks 0–2) [TODO: learner seeds launched] | results pending |
 | `slurm/diagnostics_array.sbatch` | behaviour diagnostics of 9 checkpoints (§6.4) | done |
 | `slurm/h2h_array.sbatch` | 8 shards per pool (`final`, `time`) | `final` done, `time` not played |
 
 Orfeo allows at most 20 jobs in the queue and 5 running, so each array goes in waves of 5 jobs of about 1.5 h. One best response failed twice on an I/O error of the shared filesystem (log not written); the code now ignores that write error.
 
-**Resuming a run.** A run stopped by the time limit can be continued with `--resume` (in `train.py` and `best_response.py`; `RESUME=1` in `br_array.sbatch`), with the same arguments as the original run. The latest `ckpt_*.pt` is loaded, `log.csv` is cut after that checkpoint and training continues from the next update. Checkpoints written before this option existed have no optimizer state: Adam then restarts with empty moment estimates, a small deviation from an uninterrupted run, which the script prints. [TODO: list the runs that were resumed, and whether from a checkpoint without optimizer state.]
+**Resuming a run.** A run stopped by the time limit can be continued with `--resume` (in `train.py` and `best_response.py`; `RESUME=1` in `br_array.sbatch`), with the same arguments as the original run. The latest `ckpt_*.pt` is loaded, `log.csv` is cut after that checkpoint and training continues from the next update. Checkpoints written before this option existed have no optimizer state: Adam then restarts with empty moment estimates, a small deviation from an uninterrupted run, which the script prints.
 
 **Compute used.** S = one 20M-step PPO run.
 
@@ -635,7 +634,6 @@ Orfeo allows at most 20 jobs in the queue and 5 running, so each array goes in w
 | Ablations ($\lambda$ 0 and 1, $\gamma$ 0.99, charge, delay 0 and 12), 1 seed | 6 | 6 S |
 | Best responses: 5 targets, 2 learner seeds | 10 | 10 S |
 | **Total completed** | **51** | **51 S (1.02 billion steps)** |
-| Best responses with a floored learner (results pending) | [TODO] | [TODO] |
 
 Evaluations, head-to-head and diagnostics take a few minutes per model.
 
@@ -714,7 +712,7 @@ The script also records the distance between the players from observation featur
 
 ## 7. Experiments
 
-There are 3 comparisons: the 2 paper baselines, the reward functions and the bias–variance trade-off; then the stall fix and the environment ablations. All of these are done. One experiment was added later, after the best-response results, and is still running; the optional extensions were not run.
+There are 3 comparisons: the 2 paper baselines, the reward functions and the bias–variance trade-off; then the stall fix and the environment ablations.
 
 | Priority | Experiment | What changes | Runs | Question | Status |
 |---|---|---|---|---|---|
@@ -731,13 +729,11 @@ There are 3 comparisons: the 2 paper baselines, the reward functions and the bia
 
 The bias–variance runs and the two game ablations are all in `slurm/ablations_array.sbatch` (6 runs: `r0_lam1_s1`, `r0_lam0_s1`, `r0_gamma099_s1`, `r0_charge_s1`, `r0_delay0_s1`, `r0_delay12_s1`); the reference is `r0_s1`. The stall fix is in `slurm/floor_array.sbatch`, the best responses in `slurm/br_array.sbatch` (with `FLOOR=0.1` for the floored learners), the diagnostics in `slurm/diagnostics_array.sbatch`. All runs use the same network, so differences can be attributed to the variable that changed.
 
-Two planned analyses have not been done: the `time` head-to-head pool (§6.1) and best responses against the floor runs. The best responses with a floored learner do not replace the second: they change the learner, not the target.
-
 ---
 
 ## 8. Results
 
-The runs of the original plan are complete. The five comparison variants and the two stall-fix variants have **5 seeds each**, the six ablations one seed each, and the best responses **2 learner seeds** for each of the 5 targets. The final checkpoints have been evaluated against the fixed opponents, the `final` head-to-head pool is complete and the behaviour diagnostics have been run on seed 1 of each variant. The `time` head-to-head pool has not been played. One experiment added later is running and its results are not included yet: best responses with a floored learner (§8.4). The guiding question (§1) has an answer (§8.4), with one limit: exploitability is measured on one target seed per variant.
+The runs of the original plan are complete. The five comparison variants and the two stall-fix variants have **5 seeds each**, the six ablations one seed each, and the best responses **2 learner seeds** for each of the 5 targets. The final checkpoints have been evaluated against the fixed opponents, the `final` head-to-head pool is complete and the behaviour diagnostics have been run on seed 1 of each variant. The `time` head-to-head pool has not been played.
 
 ### 8.1 Against the fixed opponents
 
@@ -811,12 +807,12 @@ Approximate best responses (§6.3): one learner per target and learner seed, tra
 | `r3_s1` | 0.40 | 24 | 1 | 494 / 0 / 6 | 0.99 (0.97–0.99) | 0.99 |
 | | | | 2 | 157 / 224 / 119 | 0.31 (0.27–0.36) | 0.54 |
 
-- **The estimate depends on the learner seed.** For `r0_s1` and `r0_sched_s1` one learner gets out of the draws and the other does not; for `r3_s1` one learner wins almost always and the other only partly, oscillating until the end (figure `report_br_curves.png`). The learners escape late: the one against R0 only after about 14M steps, the one against Sched. after about 8M, so a learner still drawing at 20M might escape with more budget. The learner is trained with the same PPO and the same terminal reward as the main agents, without the floor, so it plausibly suffers from the same stalls (§5.4). To test this, learners trained with the floor are running against `r0_s1`, `r0_sched_s1` and `r1_s1` (§6.3); their results are not available yet. Since the best response is a lower bound, each target is judged by its **best learner**. Two learner seeds are still few: a third learner could find more.
+- **The estimate depends on the learner seed.** For `r0_s1` and `r0_sched_s1` one learner gets out of the draws and the other does not; for `r3_s1` one learner wins almost always and the other only partly, oscillating until the end (figure `report_br_curves.png`). The learners escape late: the one against R0 only after about 14M steps, the one against Sched. after about 8M, so a learner still drawing at 20M might escape with more budget. The learner is trained with the same PPO and the same terminal reward as the main agents, without the floor, so it plausibly suffers from the same stalls (§5.4). Since the best response is a lower bound, each target is judged by its **best learner**. Two learner seeds are still few: a third learner could find more.
 
   The curves count the learner's wins over the matches **finished** in each update, where timeouts (4000 steps) are underrepresented (§6.3), so they overestimate the final level: the learner against R0 is at about 95% during training but wins 48% in the final evaluation, with 222 draws. They show when a learner escapes the draws, not how much it wins; the table above is the measure to use.
 - **R2 and R3 are clearly exploitable.** Both `r2_s1` learners win 499 and 500 matches out of 500; the best `r3_s1` learner wins 494. In head-to-head these agents look roughly on par with the others (0.43 and 0.40). Their scores are not lower only because many of their pairs end in 100% draws (§8.3): a draw against another passive agent costs nothing, but an opponent that adapts to them wins almost always. For `r2_s1` this matches the fixed opponents (18% against random, 5% against FootsiesBot, the outlier seed of §8.1).
 - **R0 and R0 Sched. are exploitable, but much less.** The best learner wins about half of the matches against both (BR win rate 0.48 and 0.50) and loses very few (37 and 4 out of 500). The BR scores of 0.70 and 0.75 show a real, partial weakness, while 44–49% of the matches still end in a timeout. The rule of thumb of §6.3 ("close to 0.5 or lower means no systematic weakness") has to be read together with the draws.
-- **`r1_s1` is never exploited, but this does not show that it is robust.** Both learners draw all 500 matches: in 1000 matches they never win and never lose. This is the case anticipated in §6.3: against a passive target, a learner that only draws has not exploited it, and the draws can be an artefact of a stalled learner: both learners drop to 0% wins within about 2M steps and never recover (`report_br_curves.png`). The correct statement is that **no best response exploited R1**, not that R1 is robust. `r1_s1` is itself passive in head-to-head (100% draws against several agents). The floored learners (above) are the direct test of this case.
+- **`r1_s1` is never exploited, but this does not show that it is robust.** Both learners draw all 500 matches: in 1000 matches they never win and never lose. This is the case anticipated in §6.3: against a passive target, a learner that only draws has not exploited it, and the draws can be an artefact of a stalled learner: both learners drop to 0% wins within about 2M steps and never recover (`report_br_curves.png`). The correct statement is that **no best response exploited R1**, not that R1 is robust. `r1_s1` is itself passive in head-to-head (100% draws against several agents).
 - **Four of the five targets are stalled in self-play** (§8.7): all except `r0_s1`. A stall therefore does not protect against an opponent that adapts: `r2_s1` and `r3_s1` are stalled and still lose almost every match to their best learner. This is one more reason not to read the draws of `r1_s1`, also stalled, as robustness.
 - **Answer to the guiding question.** Winning against simple opponents does not imply being hard to exploit, and head-to-head strength only partly predicts exploitability. At the bottom of the ranking the two agree for R2 and R3, which are almost completely exploitable. But `r0_sched_s1`, **last** in head-to-head (0.36), is only moderately exploitable, about as much as `r0_s1` (15th). Against the fixed opponents `r0_s1` (88% against random, 66% against FootsiesBot) and `r1_s1` (90% and 76%) win comparably, yet one is moderately exploitable and the other gives no information. All of this rests on one target seed per variant; best responses against the floor runs, which do not stall, have not been trained.
 
@@ -906,6 +902,3 @@ They do not support that:
 
 - The ablations and the diagnostics use **one seed**; exploitability uses **one target seed** per variant and **two learner seeds**.
 - The best response is a lower bound, and the learners themselves can stall; their training curves overestimate the final win rate (§6.3, §8.4).
-- The distance between the players was not measured (§6.4).
-- Not done: the `time` head-to-head pool, PFSP, best responses against the floor runs.
-- Results not yet available: best responses with a floored learner (§8.4).

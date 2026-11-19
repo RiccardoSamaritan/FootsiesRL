@@ -11,7 +11,10 @@ Run everything from the repository root with `uv run python ...`.
   self-play. It returns observations, rewards and `terminated`/`truncated`
   flags, collects per-episode statistics and waits for the game server to be
   ready before the first `reset()`. It also has an optional `reward_fn` hook
-  for replacing the training reward (not used yet).
+  for replacing the training reward (used by `rewards.py` for R2 and R3).
+- `rewards.py`: the training rewards R0–R3, chosen with `train.py --reward`
+  (R0 terminal ±10, R1 guard break with budget, R2 potential-based shaping on
+  the guard, R3 win scaled by game length).
 - `ppo.py`: the algorithm, with no dependency on Footsies. `Agent` (actor and
   critic MLPs, 2x256 ReLU), `compute_gae` (handles termination and truncation
   differently), `ppo_update` (clipped surrogate, value loss, entropy bonus,
@@ -28,6 +31,14 @@ Run everything from the repository root with `uv run python ...`.
   opponent or a trained checkpoint.
 - `policy.py`: wraps a trained checkpoint as an Opponent, sampling actions
   (never argmax).
+- `head_to_head.py`: checkpoints play each other, in shards; writes
+  `results/h2h_<pool>*.csv` and the score matrix.
+- `best_response.py`: trains a PPO learner against a frozen checkpoint to
+  estimate its exploitability; writes `runs_br/` and `results/br_<target>.csv`.
+- `diagnostics.py`: action distribution and game statistics of a checkpoint;
+  writes `results/diag_<run>.csv`.
+- `make_tables.py`: Markdown tables of `results/summary_heuristics.md` from
+  `results/summary_final.csv`.
 
 ## Usage
 
@@ -35,12 +46,13 @@ Run everything from the repository root with `uv run python ...`.
 # quick smoke test
 uv run python src/train.py --total-steps 20000 --num-envs 4 --run-name smoke
 
-# full run with the paper settings (48 games, rollout 64, 25M steps)
-uv run python src/train.py --run-name lam0.95_s1
+# full run as in the experiments (48 games, rollout 64, 20M steps)
+uv run python src/train.py --run-name r0_s1 --reward r0 --seed 1 --total-steps 20000000
 ```
 
-Useful options: `--gae-lambda`, `--gamma`, `--lr`, `--ent-coef`, `--ent-decay`,
-`--seed`, `--port`, `--checkpoint-every`, `--wandb`.
+Useful options: `--reward`, `--gae-lambda`, `--gamma`, `--lr`, `--ent-coef`,
+`--ent-decay`, `--adv-std-floor`, `--seed`, `--port`, `--checkpoint-every`,
+`--resume`, `--wandb`.
 
 ## Notes
 
@@ -50,5 +62,6 @@ Useful options: `--gae-lambda`, `--gamma`, `--lr`, `--ent-coef`, `--ent-decay`,
   the reset observation, so the final observation of a game is lost. For
   timeouts (`max_t`) `compute_gae` approximates the bootstrap value with the
   value of the previous observation.
-- Training reward is the terminal win/loss reward (+-10). Evaluation is done
-  with `evaluate.py`; see the file list above.
+- The training reward is chosen with `--reward` (default `r0`, terminal
+  win/loss reward ±10). Evaluation always uses the game outcome; see the file
+  list above.

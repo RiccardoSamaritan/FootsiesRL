@@ -80,12 +80,16 @@ Results are appended to `results/` (`eval_<run>.csv`, `h2h_*.csv`, `br_<target>.
 **Figures**
 
 ```bash
-uv run python plots/plot_results.py && uv run python src/make_tables.py
-uv run python plots/plot_report.py
-uv run python plots/plot_paper_figures.py
-uv run python plots/plot_diagnostics.py
-uv run python plots/plot_local.py
+uv run python plot_scripts/plot_results.py && uv run python src/make_tables.py
+uv run python plot_scripts/plot_report.py
+uv run python plot_scripts/plot_paper_figures.py
+uv run python plot_scripts/plot_diagnostics.py
+uv run python plot_scripts/plot_local.py
 ```
+
+`runs/` and `runs_br/` (training logs and checkpoints) are not in git, see `RSYNC.md`.
+`plot_diagnostics.py`, `make_tables.py` and the head-to-head figure read only `results/`;
+the training and best-response curves also need the `log.csv` files of the runs.
 
 **Cluster (SLURM)**: every experiment has a script in `slurm/` with its usage in the header,
 e.g. `sbatch slurm/seeds_array.sbatch`. Written for Orfeo (partition `THIN`, CPU only): adapt
@@ -94,11 +98,11 @@ partition and account.
 ## Repository
 
 ```text
-src/        PPO, training, rewards, evaluation, tables (details: src/README.md)
-plots/      scripts that draw the figures in results/figures
-slurm/      sbatch scripts of all experiments
-results/    evaluation CSVs, tables, figures (details: results/README.md)
-docs/       full report (footsies.md)
+src/           PPO, training, rewards, evaluation, tables (details: src/README.md)
+plot_scripts/  scripts that draw the figures in results/figures
+slurm/         sbatch scripts of all experiments
+results/       evaluation CSVs, tables, figures (details: results/README.md)
+docs/          full report (footsies.md)
 test.py, visual_test.py   environment checks
 ```
 
