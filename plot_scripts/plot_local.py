@@ -13,6 +13,7 @@ import numpy as np
 from matplotlib.colors import LinearSegmentedColormap
 
 import head_to_head
+from selection import keep_run
 import plot_diagnostics
 import plot_report
 from plot_paper_figures import LOSS, OUT, VARIANTS, WIN, checkpoint_curve  # also sets the rcParams
@@ -31,7 +32,7 @@ def variant(run):
     return run.rsplit("_s", 1)[0]
 
 
-def fig_diag():
+def fig_diag(names=("paper_diag_stall.png", "paper_diag_actions.png")):
     data = [(NAMES[variant(run)], plot_diagnostics.load(run)) for run, _ in plot_diagnostics.RUNS]
     f = plot_diagnostics.f
     names = [n for n, _ in data]
@@ -57,7 +58,7 @@ def fig_diag():
     fig.suptitle("Self-play of the seed-1 final models: decided games and attack actions",
                  x=0.01, ha="left", fontsize=12.5)
     fig.tight_layout(rect=(0, 0.07, 1, 0.94))
-    fig.savefig(OUT / "paper_diag_stall.png", dpi=200)
+    fig.savefig(OUT / names[0], dpi=200)
 
     fig, ax = plt.subplots(figsize=(11, 4.8))
     left = np.zeros(len(data))
@@ -74,11 +75,11 @@ def fig_diag():
     fig.suptitle("Action distribution in self-play of the seed-1 final models",
                  x=0.01, ha="left", fontsize=12.5)
     fig.tight_layout(rect=(0, 0, 1, 0.94))
-    fig.savefig(OUT / "paper_diag_actions.png", dpi=200)
-    return "paper_diag_stall.png", "paper_diag_actions.png"
+    fig.savefig(OUT / names[1], dpi=200)
+    return names
 
 
-def fig_seeds():
+def fig_seeds(name="paper_report_seeds.png"):
     fig, axes = plt.subplots(1, 2, figsize=(12, 4.4), sharey=True)
     ypos = np.arange(len(VARIANTS))[::-1]
     for ax, (opp, title) in zip(axes, (("random", "(a) vs. random opponent"),
@@ -99,11 +100,11 @@ def fig_seeds():
     fig.suptitle("Final win rate of each seed against heuristic opponents",
                  x=0.01, ha="left", fontsize=12.5)
     fig.tight_layout(rect=(0, 0.07, 1, 0.94))
-    fig.savefig(OUT / "paper_report_seeds.png", dpi=200)
-    return "paper_report_seeds.png"
+    fig.savefig(OUT / name, dpi=200)
+    return name
 
 
-def fig_noop():
+def fig_noop(name="paper_report_noop.png"):
     rows = [checkpoint_curve(v, "noop") for v, _, _ in VARIANTS]
     steps = rows[0][0]
     grid = np.array([vals.mean(axis=0) for _, vals in rows])
@@ -124,8 +125,8 @@ def fig_noop():
     fig.suptitle("Win rate against the no-op opponent during training:\nmean over 5 seeds",
                  x=0.01, ha="left", fontsize=12.5)
     fig.tight_layout(rect=(0, 0, 1, 0.92))
-    fig.savefig(OUT / "paper_report_noop.png", dpi=200)
-    return "paper_report_noop.png"
+    fig.savefig(OUT / name, dpi=200)
+    return name
 
 
 def h2h_panel(ax, score, draw, labels, title, annotate):
@@ -148,9 +149,12 @@ def h2h_panel(ax, score, draw, labels, title, annotate):
 
 def fig_h2h():
     pairs = head_to_head.load_pairs("final")
-    labels = sorted({x for ab in pairs for x in ab}, key=head_to_head.sort_key)
+    labels = sorted({x for ab in pairs for x in ab if keep_run(x.split("/")[0])}, key=head_to_head.sort_key)
     score, draw = head_to_head.build_matrices(pairs, labels)
     groups, gs, gd = head_to_head.group_matrices(score, draw, labels)
+    # no self-matchups: an agent never plays itself, and we also drop the variant-vs-same-variant cells
+    np.fill_diagonal(gs, np.nan)
+    np.fill_diagonal(gd, np.nan)
     short = lambda v: NAMES[v].split(" (")[0]  # "R0 Sched (PPO Sched.)" -> "R0 Sched"
     agents = [f"{short(head_to_head.variant_of(l))}, s{l.split('/')[0].rsplit('_s', 1)[1]}" for l in labels]
     variants = [short(g.split("/")[0]) for g in groups]
@@ -161,7 +165,7 @@ def fig_h2h():
     fig.colorbar(im, ax=axes.tolist(), shrink=0.75, pad=0.02, label="Score of row vs. column")
     fig.suptitle("Head-to-head between the final models: score = (wins + 0.5 draws) / games, 100 games per pair.\n"
                  "Green: row wins, orange: row loses. D = share of draws. "
-                 "Diagonal of (b): different seeds of the same variant.", x=0.01, ha="left", fontsize=12.5)
+                 "Self-matchups are not shown.", x=0.01, ha="left", fontsize=12.5)
     fig.savefig(OUT / "paper_h2h_final.png", dpi=200, bbox_inches="tight")
     return "paper_h2h_final.png"
 

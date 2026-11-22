@@ -30,6 +30,11 @@ import warnings
 from pathlib import Path
 
 import matplotlib
+from selection import keep_run
+from plot_paper_figures import ALL_VARIANTS  # paper palette and names
+
+PAPER_COLOR = {v: c for v, _, c in ALL_VARIANTS}
+PAPER_NAME = {v: n for v, n, _ in ALL_VARIANTS}
 import numpy as np
 
 matplotlib.use("Agg")
@@ -40,7 +45,7 @@ SLOTS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#625
 REWARD_SLOT = {"r0": 0, "r1": 1, "r2": 2, "r3": 3}
 # fixed colors of the variants that are not a plain reward, so they never look like another variant
 VARIANT_COLOR = {"r0_sched": "#e87ba4", "r1_floor": "#6250d6"}
-SURFACE, INK, MUTED, GRID = "#fcfcfb", "#0b0b0b", "#52514e", "#e6e5e1"
+SURFACE, INK, MUTED, GRID = "#ffffff", "#0b0b0b", "#52514e", "#e6e5e1"
 FIXED_OPPONENTS = ["random", "footsies_bot", "noop", "back"]
 OPPONENT_TITLES = {"random": "vs random", "footsies_bot": "vs FootsiesBot",
                    "noop": "vs noop (stands still)", "back": "vs back (holds back)"}
@@ -63,7 +68,7 @@ def make_series(runs, per_run):
     groups = {}
     for r in runs:
         groups.setdefault(variant_of(r), []).append(r)
-    return [{"label": f"{v} (n={len(m)})" if len(m) > 1 else m[0], "key": v, "members": m}
+    return [{"label": f"{PAPER_NAME.get(v, v)} (n={len(m)})" if len(m) > 1 else m[0], "key": v, "members": m}
             for v, m in groups.items()]
 
 
@@ -73,7 +78,9 @@ def series_colors(series):
     colors, spare = {}, iter(SLOTS[4:])
     for s in series:
         key = variant_of(s["key"])
-        if key in REWARD_SLOT:
+        if key in PAPER_COLOR:  # same color as in the paper-style figures
+            colors[s["key"]] = PAPER_COLOR[key]
+        elif key in REWARD_SLOT:
             colors[s["key"]] = SLOTS[REWARD_SLOT[key]]
         else:
             colors[s["key"]] = VARIANT_COLOR.get(variant_of(s["key"]), next(spare, MUTED))
@@ -337,7 +344,10 @@ def main():
 
     runs_dir, out = Path(args.runs_dir), Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    runs = args.runs or sorted(d.name for d in runs_dir.iterdir() if (d / "log.csv").exists())
+    all_runs = args.runs or sorted(d.name for d in runs_dir.iterdir() if (d / "log.csv").exists())
+    # figures: only the variants listed in selection.py (unless --runs is given);
+    # summary_final.csv: every run, because make_tables.py needs all of them
+    runs = args.runs or [r for r in all_runs if keep_run(r)]
     if not runs:
         raise SystemExit(f"no runs with a log.csv in {runs_dir}")
     series = make_series(runs, args.per_run)
@@ -346,11 +356,12 @@ def main():
 
     eval_files = [Path(f) for f in args.eval_csv] if args.eval_csv else \
         sorted((ROOT / "results").glob("eval*.csv"))
-    rows = [r for r in load_eval(eval_files, runs_dir) if r["run"] in runs]
+    all_rows = [r for r in load_eval(eval_files, runs_dir) if r["run"] in all_runs]
+    rows = [r for r in all_rows if r["run"] in runs]
     if rows:
         plot_eval(rows, series, colors, out / "eval_curves.png")
         print(f"wrote {out / 'eval_curves.png'} ({len(rows)} evaluations)")
-        summarize_final(rows, series, Path(args.summary))
+        summarize_final(all_rows, make_series(all_runs, args.per_run), Path(args.summary))
     else:
         print("no checkpoint evaluations in results/eval_*.csv yet: eval_curves.png not written")
 

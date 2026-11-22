@@ -12,6 +12,7 @@ import csv
 from pathlib import Path
 
 import matplotlib
+from selection import PLOT_VARIANTS, keep_run
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
@@ -25,6 +26,10 @@ VARIANTS = [("r0", "R0 (PPO)", "#4c9fd6"), ("r0_sched", "R0 Sched (PPO Sched.)",
             ("r1", "R1", "#2ca25f"), ("r2", "R2", "#9e6bc4"), ("r3", "R3", "#d95f02"),
             ("r0_floor", "R0 + floor", "#e7a33e"), ("r1_floor", "R1 + floor", "#c2185b")]
 TARGETS = [("r0_s1", "R0"), ("r0_sched_s1", "R0 Sched"), ("r1_s1", "R1"), ("r2_s1", "R2"), ("r3_s1", "R3")]
+ALL_VARIANTS = list(VARIANTS)  # names and colors of every variant (used by the other scripts)
+# only the variants listed in selection.py
+VARIANTS = [v for v in VARIANTS if v[0] in PLOT_VARIANTS]
+TARGETS = [t for t in TARGETS if keep_run(t[0])]
 
 
 def read_log(path):
@@ -72,8 +77,12 @@ def final_eval(target, suffix):
 
 
 def fig_br(suffix):
-    fig, axes = plt.subplots(1, len(TARGETS), figsize=(14, 3.6), sharey=True)
-    for ax, (target, name) in zip(axes, TARGETS):
+    # only the targets that have best-response runs with this suffix
+    targets = [(t, n) for t, n in TARGETS
+               if any(Path(f"runs_br/br_{t}_b{b}{suffix}/log.csv").exists() for b in (1, 2, 3))]
+    fig, axes = plt.subplots(1, len(targets), figsize=(2.8 * len(targets) + 1, 3.6), sharey=True, squeeze=False)
+    axes = axes[0]
+    for ax, (target, name) in zip(axes, targets):
         logs = [read_log(p) for b in (1, 2, 3)
                 if (p := Path(f"runs_br/br_{target}_b{b}{suffix}/log.csv")).exists()]
         if not logs:

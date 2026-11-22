@@ -46,8 +46,9 @@ from matplotlib.colors import LinearSegmentedColormap  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 RESULTS = ROOT / "results"
-SURFACE, INK, MUTED = "#fcfcfb", "#0b0b0b", "#52514e"
-CMAP = LinearSegmentedColormap.from_list("h2h", ["#eb6834", "#f3f2ee", "#2a78d6"])
+SURFACE, INK, MUTED = "#ffffff", "#0b0b0b", "#52514e"
+# same colors as the paper-style figures: orange = row loses, green = row wins
+CMAP = LinearSegmentedColormap.from_list("h2h", ["#d95f02", "#f7f7f7", "#1b9e77"])
 FIELDS = ["timestamp", "a", "b", "games", "wins_a", "draws", "wins_b", "score_a",
           "ci_low", "ci_high", "seed"]
 
@@ -215,6 +216,9 @@ def ranking(score, labels):
 def plot_matrix(pairs, labels, out_png, label):
     score, draw = build_matrices(pairs, labels)
     groups, gs, gd = group_matrices(score, draw, labels)
+    # no self-matchups: drop the variant-vs-same-variant cells (different seeds of one variant)
+    np.fill_diagonal(gs, np.nan)
+    np.fill_diagonal(gd, np.nan)
     two = 1 < len(groups) < len(labels)
     n = len(labels)
     size = max(5.5, 0.55 * n + 3) if n <= 10 else max(7.5, 0.28 * n + 3)
@@ -224,12 +228,12 @@ def plot_matrix(pairs, labels, out_png, label):
                      "Score of row against column (0.5 = even)", annotate=n <= 8)
     if two:
         draw_matrix(axes[0, 1], gs, gd, groups,
-                    "Mean over agent pairs of each group (diagonal: different seeds)",
+                    "Mean over agent pairs of each group",
                     annotate=True)
     cbar = fig.colorbar(im, ax=axes.ravel().tolist(), shrink=0.7, pad=0.02)
     cbar.set_label("score = (wins + 0.5 draws) / games", color=MUTED, fontsize=9)
     cbar.ax.tick_params(colors=MUTED, labelsize=8)
-    fig.suptitle(f"Head-to-head: {label} (orange: row loses, blue: row wins; dr = share of draws)",
+    fig.suptitle(f"Head-to-head: {label} (orange: row loses, green: row wins; dr = share of draws)",
                  x=0.01, ha="left", fontsize=12, color=INK)
     fig.savefig(out_png, dpi=160, facecolor=SURFACE, bbox_inches="tight")
     plt.close(fig)
@@ -259,6 +263,8 @@ def main():
     p.add_argument("--parallel", type=int, default=48)
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--plot-only", action="store_true", help="do not play, redraw from the CSV")
+    p.add_argument("--variants", nargs="*", default=None,
+                   help="with --plot-only: draw only these variants (e.g. r0 r0_sched r2); default all")
     p.add_argument("--shard", default="0/1",
                    help="K/N: play only the pairs with number %% N == K (N jobs share one pool); "
                         "draw the figure afterwards with --plot-only")
@@ -281,7 +287,8 @@ def main():
     labels = sorted({x for ab in pairs for x in ab}, key=sort_key)
     fig_dir = RESULTS / "figures"
     fig_dir.mkdir(parents=True, exist_ok=True)
-    plot_matrix(pairs, labels, fig_dir / f"h2h_{args.label}.png", args.label)
+    plot_labels = [l for l in labels if args.variants is None or variant_of(l) in args.variants]
+    plot_matrix(pairs, plot_labels, fig_dir / f"h2h_{args.label}.png", args.label)
     score, _ = build_matrices(pairs, labels)
     rank = ranking(score, labels)
     save_ranking(rank, RESULTS / f"h2h_{args.label}_ranking.csv")

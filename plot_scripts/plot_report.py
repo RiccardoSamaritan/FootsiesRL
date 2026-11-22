@@ -11,15 +11,20 @@ import csv
 from pathlib import Path
 
 import matplotlib
+from selection import PLOT_VARIANTS, keep_run
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
 OUT = Path("results/figures")
 VARIANTS = [("r0", "R0"), ("r0_sched", "R0 Sched"), ("r1", "R1"), ("r2", "R2"), ("r3", "R3"),
-            ("r0_floor", "R0 con correzione"), ("r1_floor", "R1 con correzione")]
-BASE, FLOOR, INK = "#2a7ab0", "#e07b39", "#333333"
-plt.rcParams.update({"font.size": 11, "axes.spines.top": False, "axes.spines.right": False})
+            ("r0_floor", "R0 + floor"), ("r1_floor", "R1 + floor")]
+VARIANTS = [v for v in VARIANTS if v[0] in PLOT_VARIANTS]  # only the variants listed in selection.py
+from plot_paper_figures import ALL_VARIANTS  # paper palette (also sets the rcParams)
+
+COLOR = {v: c for v, _, c in ALL_VARIANTS}
+BASE, FLOOR, INK = COLOR["r0"], COLOR["r0_floor"], "#333333"
+SEED_COLORS = {1: "#1f4e8c", 2: "#e7a33e"}  # best-response seeds
 
 
 def eval_rows(run):
@@ -52,7 +57,7 @@ def smooth(y, w):
 def fig_seeds():
     fig, axes = plt.subplots(1, 2, figsize=(11, 4.4), sharey=True)
     ypos = np.arange(len(VARIANTS))[::-1]
-    for ax, opp, title in ((axes[0], "random", "Contro Random"), (axes[1], "footsies_bot", "Contro FootsiesBot")):
+    for ax, opp, title in ((axes[0], "random", "Against Random"), (axes[1], "footsies_bot", "Against FootsiesBot")):
         for y, (v, _) in zip(ypos, VARIANTS):
             vals = [final_rate(f"{v}_s{i}", opp) for i in range(1, 6)]
             col = FLOOR if "floor" in v else BASE
@@ -60,62 +65,64 @@ def fig_seeds():
             ax.plot([np.mean(vals)] * 2, [y - 0.3, y + 0.3], color=INK, linewidth=2.2, zorder=4)
         ax.set_xlim(0, 1)
         ax.set_title(title, loc="left", fontsize=12)
-        ax.set_xlabel("win rate del modello finale")
+        ax.set_xlabel("win rate of the final model")
         ax.grid(axis="x", alpha=0.25)
     axes[0].set_yticks(ypos)
     axes[0].set_yticklabels([n for _, n in VARIANTS])
     fig.legend(handles=[plt.Line2D([], [], marker="o", ls="", color=BASE, markersize=8),
                         plt.Line2D([], [], marker="o", ls="", color=FLOOR, markersize=8),
                         plt.Line2D([], [], color=INK, linewidth=2.2)],
-               labels=["un seed", "un seed, con correzione sui vantaggi", "media dei 5 seed"],
+               labels=["one seed", "one seed, with the advantage-std floor", "mean over 5 seeds"],
                loc="lower center", ncol=3, frameon=False)
-    fig.suptitle("I seed di una stessa variante sono più sparsi delle medie tra varianti", x=0.01, ha="left", fontsize=12.5)
+    fig.suptitle("Seeds of the same variant are more spread out than the means of different variants", x=0.01, ha="left", fontsize=12.5)
     fig.tight_layout(rect=(0, 0.07, 1, 0.94))
     fig.savefig(OUT / "report_seeds.png", dpi=200)
 
 
 def fig_stall():
-    fig, axes = plt.subplots(2, 1, figsize=(10, 5.6), sharex=True)
-    for run, lab, col in (("r0_s5", "R0 seed 5", BASE), ("r0_floor_s5", "R0 seed 5, con correzione", FLOOR)):
+    fig, axes = plt.subplots(2, 1, figsize=(10, 5.8), sharex=True)
+    for run, lab, col in (("r0_s5", "R0, seed 5", BASE), ("r0_floor_s5", "R0 + floor, seed 5", FLOOR)):
         s, t = column(f"runs/{run}/log.csv", "timeout_rate")
         _, a = column(f"runs/{run}/log.csv", "adv_std")
         axes[0].plot(s / 1e6, 100 * smooth(t, 60), color=col, linewidth=2, label=lab)
         axes[1].plot(s / 1e6, smooth(a, 60), color=col, linewidth=2)
-    axes[0].set_ylabel("partite in timeout (%)")
+    axes[0].set_title("(a) games ending in timeout (%)", loc="left", fontsize=12)
     axes[0].set_ylim(0, 102)
-    axes[0].legend(frameon=False, loc="upper left")
+    axes[1].set_title("(b) standard deviation of the advantages (log scale)", loc="left", fontsize=12)
     axes[1].set_yscale("log")
-    axes[1].set_ylabel("dev. std. dei vantaggi")
-    axes[1].set_xlabel("passi di addestramento (milioni)")
+    axes[1].set_xlabel("Environment step (M)")
     for ax in axes:
         ax.grid(alpha=0.25)
-    fig.suptitle("Quando tutte le partite vanno in timeout, la deviazione standard dei vantaggi crolla",
+    h, l = axes[0].get_legend_handles_labels()
+    fig.legend(h, l, loc="lower center", ncol=2, frameon=False)
+    fig.suptitle("Stalls during training: when every game ends in timeout, the advantage std collapses",
                  x=0.01, ha="left", fontsize=12.5)
-    fig.tight_layout(rect=(0, 0, 1, 0.95))
+    fig.tight_layout(rect=(0, 0.06, 1, 0.94))
     fig.savefig(OUT / "report_stall.png", dpi=200)
 
 
 def fig_br():
     targets = [("r0_s1", "R0"), ("r0_sched_s1", "R0 Sched"), ("r1_s1", "R1"), ("r2_s1", "R2"), ("r3_s1", "R3")]
-    fig, axes = plt.subplots(1, 5, figsize=(13, 3.4), sharey=True)
-    for ax, (t, name) in zip(axes, targets):
-        for b, col in ((1, BASE), (2, FLOOR)):
+    targets = [t for t in targets if keep_run(t[0])]
+    fig, axes = plt.subplots(1, len(targets), figsize=(3 * len(targets) + 1, 3.6), sharey=True)
+    for k, (ax, (t, name)) in enumerate(zip(axes, targets)):
+        for b, col in SEED_COLORS.items():
             p = Path(f"runs_br/br_{t}_b{b}/log.csv")
             if not p.exists():
                 continue
             s, w = column(p, "br_win")
-            ax.plot(s / 1e6, 100 * smooth(w, 150), color=col, linewidth=2, label=f"best response, seed {b}")
-        ax.set_title(f"contro {name}", loc="left", fontsize=11.5)
+            ax.plot(s / 1e6, 100 * smooth(w, 150), color=col, linewidth=2, label=f"Best response, seed {b}")
+        ax.set_title(f"({chr(97 + k)}) vs. {name}", loc="left", fontsize=12)
         ax.set_ylim(-2, 102)
         ax.set_xlim(0, 20)
         ax.grid(alpha=0.25)
-        ax.set_xlabel("passi (milioni)")
-    axes[0].set_ylabel("vittorie della best response (%)")
+        ax.set_xlabel("BR environment step (M)")
+    axes[0].set_ylabel("Best-response win rate (%)")
     h, l = axes[0].get_legend_handles_labels()
     fig.legend(h, l, loc="lower center", ncol=2, frameon=False)
-    fig.suptitle("La best response dipende dal proprio seed: contro R0, Sched e R3 un seed esce dai pareggi, l'altro no",
+    fig.suptitle("Best-response win rate during training: the result depends on the seed of the best response",
                  x=0.01, ha="left", fontsize=12.5)
-    fig.tight_layout(rect=(0, 0.09, 1, 0.92))
+    fig.tight_layout(rect=(0, 0.1, 1, 0.92))
     fig.savefig(OUT / "report_br_curves.png", dpi=200)
 
 
@@ -147,18 +154,30 @@ def fig_noop():
     ax.set_xticklabels([f"{m}M" for m in marks])
     ax.set_yticks(range(len(VARIANTS)))
     ax.set_yticklabels([n for _, n in VARIANTS])
-    ax.set_xlabel("passi di addestramento")
+    ax.set_xlabel("training steps")
     for s in ax.spines.values():
         s.set_visible(False)
-    ax.set_title("Vittorie contro No-op (%), media sui seed:\nla capacità di battere un avversario fermo si perde",
+    ax.set_title("Wins against No-op (%), mean over seeds:\nthe ability to beat an opponent that stands still is lost",
                  loc="left", fontsize=12)
     fig.colorbar(im, ax=ax, fraction=0.04, pad=0.03)
     fig.tight_layout()
     fig.savefig(OUT / "report_noop.png", dpi=200)
 
 
+def fig_seeds_paper_style():
+    """report_seeds.png: the same figure as paper_report_seeds.png (plot_local.py)."""
+    import plot_local
+    plot_local.fig_seeds("report_seeds.png")
+
+
+def fig_noop_paper_style():
+    """report_noop.png: the same figure as paper_report_noop.png (plot_local.py)."""
+    import plot_local
+    plot_local.fig_noop("report_noop.png")
+
+
 if __name__ == "__main__":
     OUT.mkdir(parents=True, exist_ok=True)
-    for f in (fig_seeds, fig_stall, fig_br, fig_noop):
+    for f in (fig_seeds_paper_style, fig_stall, fig_br, fig_noop_paper_style):
         f()
         print("ok", f.__name__)
