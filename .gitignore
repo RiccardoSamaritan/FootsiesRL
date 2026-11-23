@@ -220,8 +220,8 @@ binaries/
 .DS_Store
 runs/
 .DS_Store
+
 slurm/logs/
 
-important.md
 runs_br/
 

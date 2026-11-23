@@ -77,16 +77,6 @@ uv run python src/diagnostics.py runs/r0_s1/final.pt
 Results are appended to `results/` (`eval_<run>.csv`, `h2h_*.csv`, `br_<target>.csv`,
 `diag_<run>.csv`). Actions are always sampled from the policy, never argmax.
 
-**Figures**
-
-```bash
-uv run python plot_scripts/plot_results.py && uv run python src/make_tables.py
-uv run python plot_scripts/plot_report.py
-uv run python plot_scripts/plot_paper_figures.py
-uv run python plot_scripts/plot_diagnostics.py
-uv run python plot_scripts/plot_local.py
-```
-
 `runs/` and `runs_br/` (training logs and checkpoints) are not in git, see `RSYNC.md`.
 `plot_diagnostics.py`, `make_tables.py` and the head-to-head figure read only `results/`;
 the training and best-response curves also need the `log.csv` files of the runs.
@@ -98,18 +88,17 @@ partition and account.
 ## Repository
 
 ```text
-src/           PPO, training, rewards, evaluation, tables (details: src/README.md)
-plot_scripts/  scripts that draw the figures in results/figures
+src/           PPO, training, rewards, evaluation, tables
 slurm/         sbatch scripts of all experiments
-results/       evaluation CSVs, tables, figures (details: results/README.md)
-docs/          full report (footsies.md)
+results/       evaluation CSVs, tables, figures
+docs/          main paper
 test.py, visual_test.py   environment checks
 ```
 
 ## Authors
 
-Alessio Martucci
+[Alessio Martucci](https://www.github.com/tushytypes)
 
-Giovanni Oro
+[Giovanni Oro](https://www.github.com/GioOro)
 
-Riccardo Samaritan
+[Riccardo Samaritan](https://www.github.com/RiccardoSamaritan)
